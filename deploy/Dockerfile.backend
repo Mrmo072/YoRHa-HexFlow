@@ -1,0 +1,14 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+# If requirements.txt doesn't exist, we can use pip install directly or copy pyproject.toml
+# For this project we just relied on venv in dev, let's create a requirements.txt or install manually in docker.
+# Generating requirements.txt first is good practice.
+
+RUN pip install --no-cache-dir fastapi uvicorn pydantic
+
+COPY . .
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

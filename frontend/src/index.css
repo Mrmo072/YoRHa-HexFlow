@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Nier Light Theme Palette */
+  --color-nier-dark: #dad4bb;
+  /* Beige/Light Grey Background */
+  --color-nier-light: #4a4a4a;
+  /* Dark Grey Text */
+  --color-nier-highlight: #5c5c5c;
+  --color-nier-grid: #b0b0a8;
+
+  --radius-none: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-full: 0px;
+  --radius-DEFAULT: 0px;
+
+  --shadow-nier: 2px 2px 0px 0px rgba(0, 0, 0, 0.1);
+}
+
+:root {
+  --nier-bg: #dad4bb;
+  /* Light Beige */
+  --nier-fg: #4a4a4a;
+  /* Dark Grey */
+}
+
+body {
+  background-color: var(--nier-bg);
+  color: var(--nier-fg);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+/* 1px crisp lines */
+* {
+  shape-rendering: crispEdges;
+  border-radius: 0 !important;
+  /* Force no border radius */
+}
+
+/* Custom Utilities */
+.nier-border {
+  border: 1px solid var(--nier-fg);
+}
+
+.nier-btn {
+  @apply border border-nier-light px-4 py-1 text-sm font-bold uppercase transition-none cursor-pointer select-none;
+}
+
+.nier-btn:hover {
+  @apply bg-nier-light text-nier-dark;
+}
+
+.nier-btn:active {
+  @apply bg-white text-black;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--nier-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--nier-fg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #fff;
+}
