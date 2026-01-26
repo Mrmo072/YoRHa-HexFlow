@@ -35,5 +35,11 @@ export const api = {
             method: 'DELETE'
         });
         return response.json();
+    },
+
+    // Operators
+    getOperatorTemplates: async () => {
+        const response = await fetch(`${API_BASE}/operator_templates/`);
+        return response.json();
     }
 };

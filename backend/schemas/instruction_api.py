@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
 # Shared Enums (Must match DB)
@@ -7,43 +7,69 @@ class InstructionType(str, Enum):
     STATIC = "STATIC"
     DYNAMIC = "DYNAMIC"
 
-class BitFieldSchema(BaseModel):
-    id: Optional[str]
-    bit_name: str
-    start_bit: int
-    bit_len: int
-    default_val: int = 0
+class RepeatType(str, Enum):
+    NONE = "NONE"
+    FIXED = "FIXED"
+    DYNAMIC = "DYNAMIC"
+
+class Endianness(str, Enum):
+    BIG = "BIG"
+    LITTLE = "LITTLE"
+
+# Operator Template Schema
+class OperatorTemplateSchema(BaseModel):
+    op_code: str
+    name: str
+    category: str
+    param_template: Dict[str, Any]
+    description: Optional[str] = None
     
     class Config:
         from_attributes = True
 
+# Instruction Field Schema
 class InstructionFieldSchema(BaseModel):
-    id: Optional[str]
+    id: Optional[str] = None
     parent_id: Optional[str] = None
     sequence: int = 0
-    name: str # Was label
+    name: str
+    
     op_code: str
-    config_values: Dict[str, Any] = {}
-    byte_len: int = 1 # Was byte_length
-    endianness: str = "BIG"
+    byte_len: int = 0
+    endianness: Endianness = Endianness.BIG
+    
+    # Repeat / Nesting
+    repeat_type: RepeatType = RepeatType.NONE
+    repeat_ref_id: Optional[str] = None
+    repeat_count: int = 1
+    
+    # Parameter Config
+    parameter_config: Optional[Dict[str, Any]] = None
     
     children: List['InstructionFieldSchema'] = []
-    bit_fields: List[BitFieldSchema] = []
     
     class Config:
         from_attributes = True
 
-class InstructionCreate(BaseModel):
-    id: Optional[str] = None
-    code: Optional[str] = None
-    opcode_hex: str = "00"
-    name: str # Was label
+# Recursion logic for Pydantic
+InstructionFieldSchema.model_rebuild()
+
+class InstructionBase(BaseModel):
+    device_code: str
+    code: str
+    name: str
     description: Optional[str] = None
-    type: str = "STATIC"
+    type: InstructionType = InstructionType.DYNAMIC
+
+class InstructionCreate(InstructionBase):
     fields: List[InstructionFieldSchema] = []
 
-class InstructionResponse(InstructionCreate):
-    id: str # ID required in response
+class InstructionUpdate(InstructionBase):
+    fields: List[InstructionFieldSchema] = []
+
+class InstructionResponse(InstructionBase):
+    id: str
+    fields: List[InstructionFieldSchema] = []
     
     class Config:
         from_attributes = True

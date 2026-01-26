@@ -2,11 +2,11 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function Block({ id, label, name, byte_length, byte_len, type, hex_value, config_values, children, isSelected, onClick }) {
+export default function Block({ id, label, name, byte_length, byte_len, type, hex_value, parameter_config, children, isSelected, onClick }) {
     // Normalize Props (Backend v4 vs v3)
     const displayLabel = name || label || 'BLOCK';
     const length = byte_len || byte_length || 1;
-    const effectiveHex = hex_value || config_values?.hex;
+    const effectiveHex = hex_value || parameter_config?.hex;
 
     const {
         attributes,

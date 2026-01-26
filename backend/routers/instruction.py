@@ -5,8 +5,8 @@ from typing import List
 import uuid
 
 from backend.db.database import get_db, engine, Base
-from backend.db.models import Instruction, InstructionField, BitField
-from backend.schemas.instruction_api import InstructionCreate, InstructionResponse, InstructionFieldSchema
+from backend.db.models import Instruction, InstructionField
+from backend.schemas.instruction_api import InstructionCreate, InstructionResponse, InstructionFieldSchema, InstructionUpdate
 
 # Create tables if not exist (Simple migration)
 # In prod use Alembic
@@ -26,31 +26,25 @@ def save_field_tree(db: Session, field_data: InstructionFieldSchema, instruction
         instruction_id=instruction_id,
         parent_id=parent_id,
         sequence=field_data.sequence,
-        name=field_data.name, # Was label
+        name=field_data.name,
         op_code=field_data.op_code,
-        config_values=field_data.config_values,
-        byte_len=field_data.byte_len, # Was byte_length
-        endianness=field_data.endianness
+        
+        # New Schema Fields
+        parameter_config=field_data.parameter_config,
+        byte_len=field_data.byte_len,
+        endianness=field_data.endianness,
+        
+        repeat_type=field_data.repeat_type,
+        repeat_ref_id=field_data.repeat_ref_id,
+        repeat_count=field_data.repeat_count
     )
     db.add(db_field)
     db.flush()
     
-    # 2. Save BitFields
-    for bf in field_data.bit_fields:
-        bf_id = bf.id or str(uuid.uuid4())
-        db_bf = BitField(
-            id=bf_id,
-            field_id=f_id,
-            bit_name=bf.bit_name, # Was label
-            start_bit=bf.start_bit,
-            bit_len=bf.bit_len, # Was bit_width
-            default_val=bf.default_val
-        )
-        db.add(db_bf)
-    
-    # 3. Recurse Children
-    for child in field_data.children:
-        save_field_tree(db, child, instruction_id, f_id)
+    # Recurse Children
+    if field_data.children:
+        for child in field_data.children:
+            save_field_tree(db, child, instruction_id, f_id)
 
 
 @router.get("/", response_model=List[InstructionResponse])
@@ -76,25 +70,17 @@ def get_instruction_detail(id: str, db: Session = Depends(get_db)):
                 sort_tree(n.children)
     sort_tree(roots)
     
-    return InstructionResponse(
-        id=inst.id,
-        code=inst.code,
-        opcode_hex=inst.opcode_hex,
-        name=inst.name,
-        description=inst.description,
-        type=inst.type,
-        fields=roots
-    )
+    return inst
 
 @router.post("/", response_model=InstructionResponse)
 def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
-    i_id = inst.id or str(uuid.uuid4())
+    i_id = str(uuid.uuid4())
     
     # 1. Create Instruction
     new_inst = Instruction(
         id=i_id,
-        code=inst.code or f"CMD-{i_id[:4]}",
-        opcode_hex=inst.opcode_hex,
+        device_code=inst.device_code,
+        code=inst.code,
         name=inst.name,
         description=inst.description,
         type=inst.type
@@ -110,48 +96,37 @@ def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
     
     db.refresh(new_inst)
     
+    # Prepare response (fields need sorting probably, but DB order is not guaranteed, relying on sequence)
     roots = [f for f in new_inst.fields if f.parent_id is None]
-    return InstructionResponse(
-        id=new_inst.id,
-        code=new_inst.code,
-        opcode_hex=new_inst.opcode_hex,
-        name=new_inst.name,
-        description=new_inst.description,
-        type=new_inst.type,
-        fields=roots
-    )
+    
+    # Ideally should sort here too
+    roots.sort(key=lambda x: x.sequence)
+    
+    return new_inst # ORM relation should handle fields structure if Schema is correct
 
 @router.put("/{id}", response_model=InstructionResponse)
-def update_instruction(id: str, updates: InstructionCreate, db: Session = Depends(get_db)):
+def update_instruction(id: str, updates: InstructionUpdate, db: Session = Depends(get_db)):
     db_inst = db.query(Instruction).filter(Instruction.id == id).first()
     if not db_inst:
         raise HTTPException(status_code=404, detail="Not Found")
     
     # Update Metadata
+    db_inst.device_code = updates.device_code
     db_inst.name = updates.name
     db_inst.code = updates.code
-    db_inst.opcode_hex = updates.opcode_hex
     db_inst.description = updates.description
     db_inst.type = updates.type
     
-    # Update Tree (Full Replace)
+    # Update Tree (Full Replace Strategy)
     db.query(InstructionField).filter(InstructionField.instruction_id == id).delete()
     
-    for f in updates.fields:
-        save_field_tree(db, f, id, None)
+    if updates.fields:
+        for f in updates.fields:
+            save_field_tree(db, f, id, None)
     
     db.commit()
     db.refresh(db_inst)
-    
-    roots = [f for f in db_inst.fields if f.parent_id is None]
-    return InstructionResponse(
-        id=db_inst.id,
-        code=db_inst.code,
-        name=db_inst.name,
-        description=db_inst.description,
-        type=db_inst.type,
-        fields=roots
-    )
+    return db_inst
 
 @router.delete("/{id}")
 def delete_instruction(id: str, db: Session = Depends(get_db)):

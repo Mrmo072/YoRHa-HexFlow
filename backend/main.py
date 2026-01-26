@@ -21,8 +21,10 @@ async def root():
 
 from backend.schemas.template import Layer, LayerType
 from backend.routers.instruction import router as instruction_router
+from backend.routers.operator import router as operator_router
 
 app.include_router(instruction_router)
+app.include_router(operator_router)
 
 # ... existing imports ...
 

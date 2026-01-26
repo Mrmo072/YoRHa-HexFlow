@@ -8,30 +8,27 @@ class InstructionType(str, enum.Enum):
     STATIC = "STATIC"
     DYNAMIC = "DYNAMIC"
 
-class LayerType(str, enum.Enum):
-    HEX_RAW = "HEX_RAW"
-    UINT = "UINT"
-    INT = "INT"
-    FLOAT = "FLOAT"
-    SCALED_DECIMAL = "SCALED_DECIMAL"
-    AUTO_COUNTER = "AUTO_COUNTER"
-    ARRAY_GROUP = "ARRAY_GROUP"
-    BITFIELD = "BITFIELD"
-    CHECKSUM = "CHECKSUM"
+class RepeatType(str, enum.Enum):
+    NONE = "NONE"
+    FIXED = "FIXED"
+    DYNAMIC = "DYNAMIC"
+
+class Endianness(str, enum.Enum):
+    BIG = "BIG"
+    LITTLE = "LITTLE"
 
 # 1. Instructions (Main Table)
 class Instruction(Base):
     __tablename__ = "instructions"
 
     id = Column(String(36), primary_key=True)
-    code = Column(String(64))
-    opcode_hex = Column(String(16)) # Main Opcode
-    name = Column(String(128)) # Was label
-    type = Column(String(32), default="STATIC") # Was Enum
+    device_code = Column(String(32), nullable=False) # New field
+    code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    type = Column(String(32), default="DYNAMIC")
     description = Column(Text, nullable=True)
     
-    # Timestamps (mapped but maybe handled by DB)
-    # created_at = ...
+    # Timestamps are handled by DB default currently
     
     # Children
     fields = relationship("InstructionField", back_populates="instruction", cascade="all, delete-orphan")
@@ -41,9 +38,9 @@ class OperatorTemplate(Base):
     __tablename__ = "operator_templates"
     
     op_code = Column(String(32), primary_key=True)
-    name = Column(String(64))
-    category = Column(String(32))
-    param_template = Column(JSON)
+    name = Column(String(64), nullable=False)
+    category = Column(String(32), nullable=False)
+    param_template = Column(JSON, nullable=False) # UI render config
     description = Column(String(255))
 
 # 3. Instruction Fields
@@ -54,31 +51,24 @@ class InstructionField(Base):
     instruction_id = Column(String(36), ForeignKey("instructions.id"))
     parent_id = Column(String(36), ForeignKey("instruction_fields.id"), nullable=True)
     
-    sequence = Column(Integer, default=0)
-    name = Column(String(64)) # Was label
-    op_code = Column(String(32))
+    sequence = Column(Integer, default=0, nullable=False)
+    name = Column(String(64), nullable=False)
     
-    byte_len = Column(Integer, default=1) # Was byte_length
-    endianness = Column(String(32), default="BIG")
-    config_values = Column(JSON, default={})
+    op_code = Column(String(32), nullable=False) # References OperatorTemplate.op_code logically
+    
+    byte_len = Column(Integer, default=0)
+    endianness = Column(String(16), default="BIG")
+    
+    # Repeat / Nesting Logic
+    repeat_type = Column(String(16), default="NONE") # NONE, FIXED, DYNAMIC
+    repeat_ref_id = Column(String(36), nullable=True) # ID of the field that dictates count
+    repeat_count = Column(Integer, default=1)   # Fixed count
+    
+    # Parameter Config (JSON)
+    parameter_config = Column(JSON, nullable=True)
     
     # Relationships
     instruction = relationship("Instruction", back_populates="fields")
     children = relationship("InstructionField", 
                             backref=backref('parent', remote_side=[id]),
                             cascade="all, delete-orphan")
-    bit_fields = relationship("BitField", back_populates="field", cascade="all, delete-orphan")
-
-# 4. Bit Fields
-class BitField(Base):
-    __tablename__ = "bit_fields"
-    
-    id = Column(String(36), primary_key=True)
-    field_id = Column(String(36), ForeignKey("instruction_fields.id"))
-    
-    bit_name = Column(String(64)) # Was label
-    start_bit = Column(Integer)
-    bit_len = Column(Integer, default=1) # Was bit_width
-    default_val = Column(Integer, default=0) # Was default_value
-    
-    field = relationship("InstructionField", back_populates="bit_fields")
