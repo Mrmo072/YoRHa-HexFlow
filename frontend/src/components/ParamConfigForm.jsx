@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export default function ParamConfigForm({
     blockState,
+    instructionFields,
     operatorTemplates,
     onUpdateParam, // (key, val) => void
     hexInputMode,
@@ -14,6 +15,25 @@ export default function ParamConfigForm({
 }) {
     const template = operatorTemplates[blockState.op_code];
     if (!template || !template.param_template) return null;
+
+    // AUTO-RECONCILE SQL IMPORTS (Name-based formula to UUID refs)
+    React.useEffect(() => {
+        const formula = blockState.parameter_config?.formula;
+        const refs = blockState.parameter_config?.refs || [];
+        if (typeof formula === 'string' && formula.includes('[') && refs.length === 0) {
+            const matches = formula.match(/\[([^\]]+)\]/g) || [];
+            const names = matches.map(m => m.slice(1, -1));
+            const resolvedRefs = names.map(name => {
+                const f = instructionFields?.find(fi => (fi.name || fi.label) === name);
+                return f?.id;
+            }).filter(Boolean);
+
+            if (resolvedRefs.length > 0) {
+                console.log(`Auto-resolving refs for ${blockState.name} from formula: ${formula}`);
+                onUpdateParam('refs', [...new Set(resolvedRefs)]);
+            }
+        }
+    }, [blockState.id, blockState.parameter_config?.formula]);
 
     return Object.entries(template.param_template).map(([key, configType]) => {
         const val = blockState.parameter_config?.[key];
@@ -60,12 +80,14 @@ export default function ParamConfigForm({
                     <select
                         value={val || configType[0]}
                         onChange={(e) => {
-                            const newVal = parseInt(e.target.value);
-                            onUpdateParam(key, newVal);
+                            const raw = e.target.value;
+                            // Smart parse: if it looks like a number, parse it
+                            const parsed = isNaN(raw) ? raw : (raw.includes('.') ? parseFloat(raw) : parseInt(raw, 10));
+                            onUpdateParam(key, parsed);
                         }}
-                        className="bg-black border border-white/30 text-xs p-1 focus:border-white focus:outline-none"
+                        className="bg-nier-dark border border-nier-light/30 text-xs p-1 text-nier-light focus:border-nier-light focus:outline-none"
                     >
-                        {configType.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {configType.map(opt => <option key={opt} value={opt} className="bg-nier-dark text-nier-light">{opt}</option>)}
                     </select>
                 </div>
             )
@@ -196,7 +218,91 @@ export default function ParamConfigForm({
             )
         }
 
-        // 4. Standard Input (Number/Text)
+        // 4. Advanced Formula Input (Logic Fields)
+        if (key === 'formula') {
+            const refs = blockState.parameter_config?.refs || [];
+            // Map refs to names
+            const linkedFields = refs.map(id => {
+                const f = instructionFields?.find(b => b.id === id);
+                return f ? (f.name || f.label) : null;
+            }).filter(Boolean);
+
+            return (
+                <div key={key} className="flex flex-col gap-2">
+                    <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
+
+                    {/* QUICK ACTIONS */}
+                    <div className="flex flex-wrap gap-1 mb-1">
+                        {linkedFields.map(name => (
+                            <button
+                                key={name}
+                                title={`Click to insert ${name}`}
+                                onClick={() => {
+                                    const current = val || '';
+                                    const spacer = (current && !current.endsWith(' ')) ? ' ' : '';
+                                    onUpdateParam(key, `${current}${spacer}[${name}] `);
+                                }}
+                                className="text-[9px] bg-nier-light/10 border border-nier-light/30 px-1.5 py-0.5 hover:bg-nier-light hover:text-nier-dark transition-colors uppercase"
+                            >
+                                + {name}
+                            </button>
+                        ))}
+                        {linkedFields.length > 1 && (
+                            <button
+                                onClick={() => {
+                                    const formula = linkedFields.map(n => `[${n}]`).join(' + ');
+                                    onUpdateParam(key, formula);
+                                }}
+                                className="text-[9px] bg-orange-400 text-black font-bold px-1.5 py-0.5 hover:opacity-80 transition-opacity uppercase"
+                            >
+                                ∑ SUM ALL
+                            </button>
+                        )}
+                        {linkedFields.length === 0 && (
+                            <div className="text-[9px] opacity-40 italic border border-dashed border-nier-light/20 px-2 py-1 w-full text-center">
+                                No linked fields. Click "SELECT FIELDS" above first.
+                            </div>
+                        )}
+                    </div>
+
+                    <textarea
+                        ref={(el) => {
+                            if (el) {
+                                el.style.height = 'auto';
+                                el.style.height = el.scrollHeight + 'px';
+                            }
+                        }}
+                        value={val || ''}
+                        placeholder="e.g. ([FieldA] + [FieldB]) / 2"
+                        rows={1}
+                        onChange={(e) => {
+                            const newFormula = e.target.value;
+                            onUpdateParam(key, newFormula);
+
+                            // AUTO-RESOLVE REFS: Extract [Name] tokens
+                            const matches = newFormula.match(/\[([^\]]+)\]/g) || [];
+                            const names = matches.map(m => m.slice(1, -1));
+                            const foundRefs = names.map(name => {
+                                const f = instructionFields?.find(fi => (fi.name || fi.label) === name);
+                                return f?.id;
+                            }).filter(Boolean);
+
+                            // MERGE logic: Keep existing refs (from picker) + Add new ones found in text
+                            const currentRefs = blockState.parameter_config?.refs || [];
+                            const uniqueMerged = [...new Set([...currentRefs, ...foundRefs])];
+
+                            if (uniqueMerged.length !== currentRefs.length) {
+                                onUpdateParam('refs', uniqueMerged);
+                            }
+                        }}
+                        className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono text-sm w-full resize-none overflow-hidden min-h-[1.5rem]"
+                    />
+                    <div className="text-[8px] opacity-30 italic">Click field tags above to quickly build formula.</div>
+                </div>
+            )
+        }
+
+        // 5. Standard Input (Number/Text)
         return (
             <div key={key} className="flex flex-col gap-1">
                 <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>

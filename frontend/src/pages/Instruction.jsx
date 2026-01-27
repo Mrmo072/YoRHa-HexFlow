@@ -7,6 +7,7 @@ import NieRDatePicker from '../components/NieRDatePicker';
 import InstructionListSidebar from '../components/InstructionListSidebar';
 import ComponentPalette from '../components/ComponentPalette';
 import BlockPropertiesPanel from '../components/BlockPropertiesPanel';
+import { evaluateFormula, formatToHex } from '../utils/formula';
 
 export default function Instruction({ onWebUpdate }) {
     // Data State
@@ -20,7 +21,37 @@ export default function Instruction({ onWebUpdate }) {
 
     // Derived State
     const currentInstruction = instructions.find(i => i.id === activeInstructionId);
-    const currentBlocks = currentInstruction?.fields || [];
+
+    // LIVE FORMULA EVALUATION
+    // We calculate this in a useMemo so it updates whenever fields change
+    const processedFields = React.useMemo(() => {
+        if (!currentInstruction?.fields) return [];
+
+        const fields = currentInstruction.fields;
+        const nameToValueMap = {};
+        fields.forEach(f => {
+            nameToValueMap[f.name || f.label] = f.byte_len || 0;
+        });
+
+        return fields.map(f => {
+            if (f.op_code === 'LENGTH_CALC') {
+                const formula = f.parameter_config?.formula;
+                const result = evaluateFormula(formula, nameToValueMap);
+                const hex = formatToHex(result, f.byte_len || 1);
+
+                return {
+                    ...f,
+                    parameter_config: {
+                        ...f.parameter_config,
+                        computedValue: hex
+                    }
+                };
+            }
+            return f;
+        });
+    }, [currentInstruction?.fields]);
+
+    const currentBlocks = processedFields;
     const [selectedId, setSelectedId] = useState(null);
     const selectedBlock = currentBlocks.find(b => b.id === selectedId);
 
@@ -215,14 +246,42 @@ export default function Instruction({ onWebUpdate }) {
     }
 
     const handleSaveBlock = (updatedBlock) => {
-        // MERGE block change into current instruction state
-        const newFields = currentBlocks.map(b => b.id === updatedBlock.id ? updatedBlock : b);
+        // 1. Identify if this is a RENAME operation
+        const oldBlock = currentBlocks.find(b => b.id === updatedBlock.id);
+        const oldName = oldBlock?.name || oldBlock?.label;
+        const newName = updatedBlock.name || updatedBlock.label;
+        const isRename = oldName !== newName;
+
+        let newFields = currentBlocks.map(b => b.id === updatedBlock.id ? updatedBlock : b);
+
+        // 2. If renamed, sync all dependent formulas
+        if (isRename) {
+            newFields = newFields.map(b => {
+                const refs = b.parameter_config?.refs || [];
+                const formula = b.parameter_config?.formula;
+
+                // If this block references the renamed block and has a formula
+                if (refs.includes(updatedBlock.id) && typeof formula === 'string') {
+                    // Replace [OldName] with [NewName]
+                    const escapedOld = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`\\[${escapedOld}\\]`, 'g');
+                    const newFormula = formula.replace(regex, `[${newName}]`);
+
+                    return {
+                        ...b,
+                        parameter_config: { ...b.parameter_config, formula: newFormula }
+                    };
+                }
+                return b;
+            });
+        }
+
         const newInst = { ...currentInstruction, fields: newFields };
 
-        // 1. Optimistic Update (Local)
+        // 3. Update Local State
         setInstructions(prev => prev.map(i => i.id === newInst.id ? newInst : i));
 
-        // 2. Async Persist (Auto-Save)
+        // 4. Async Persist (Auto-Save)
         api.updateInstruction(newInst.id, newInst)
             .then(() => setStatusMsg('CONFIG SAVED'))
             .catch(() => setStatusMsg('SAVE FAILED'));

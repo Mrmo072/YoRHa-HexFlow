@@ -67,15 +67,21 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
 
     // Logic for display value
     const displayValue = React.useMemo(() => {
+        // 1. If explicit computed value (from formula engine), use it
+        if (parameter_config?.computedValue !== undefined) {
+            return parameter_config.computedValue;
+        }
+
+        // 2. If it's a HEX block with manual value
         if (type === 'hex' && effectiveHex) {
             // Format "AA55" to "AA 55"
             return effectiveHex.replace(/\s/g, '').match(/.{1,2}/g)?.join(' ').toUpperCase() || effectiveHex;
         }
-        // "00 " repeated
-        // Ensure valid length for Array
+
+        // 3. Default: "00 " repeated for unknown/unset
         const safeLen = Math.max(1, Math.floor(length));
         return Array(safeLen).fill('00').join(' ');
-    }, [type, effectiveHex, length]);
+    }, [type, effectiveHex, length, parameter_config?.computedValue]);
 
     return (
         <div

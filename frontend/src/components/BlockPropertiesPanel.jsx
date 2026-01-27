@@ -219,6 +219,7 @@ export default function BlockPropertiesPanel({
                         {selectedBlock.op_code !== 'HEX_RAW' && (
                             <ParamConfigForm
                                 blockState={tempBlockConfig}
+                                instructionFields={currentInstruction.fields}
                                 operatorTemplates={operatorTemplates}
                                 onUpdateParam={handleTempParamUpdate}
                                 hexInputMode={hexInputMode}

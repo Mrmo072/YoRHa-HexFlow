@@ -35,9 +35,9 @@ SEED_TEMPLATES = [
     # STRUCT
     {"op_code": "ARRAY_GROUP", "name": "嵌套组", "category": "STRUCT", "description": "循环容器", "param_template": {"max_count": "number"}},
 
-    # LOGIC_CALC (New)
-    {"op_code": "LENGTH_CALC", "name": "长度计算", "category": "LOGIC", "description": "动态计算字段长度", "param_template": {"refs": "field_picker", "math_op": ["ADD", "SUB", "MUL", "DIV"], "offset": "number", "fixed_len": "number"}},
-    {"op_code": "CHECKSUM_CRC", "name": "校验码", "category": "LOGIC", "description": "CRC/Sum/Xor校验", "param_template": {"refs": "field_picker", "algo": ["CRC16_CCITT", "CRC32", "XOR_SUM", "ADD_SUM"], "fixed_len": "number"}},
+    # LOGIC_CALC (V2)
+    {"op_code": "LENGTH_CALC", "name": "长度计算", "category": "LOGIC", "description": "基于公式计算字段长度", "param_template": {"refs": "field_picker", "formula": "string"}},
+    {"op_code": "CHECKSUM_CRC", "name": "校验码", "category": "LOGIC", "description": "CRC/Sum/Xor校验", "param_template": {"refs": "field_picker", "algo": ["CRC16_CCITT", "CRC32", "XOR_SUM", "ADD_SUM"]}},
 ]
 
 @router.on_event("startup")
