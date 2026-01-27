@@ -1,0 +1,44 @@
+import React from 'react';
+
+export default function InstructionListSidebar({
+    instructions,
+    activeInstructionId,
+    searchTerm,
+    setSearchTerm,
+    onSearch, // Optional specific search handler if separate from set
+    onSelect, // (id) => void
+    onAdd,
+    onDelete, // (e, id) => void
+    hasUnsavedChanges
+}) {
+    return (
+        <aside className="w-48 border-r border-nier-light/30 bg-nier-dark/50 flex flex-col">
+            <div className="p-4 border-b border-nier-light/30 flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold tracking-widest">指令库 (DATABASE)</span>
+                    <button onClick={onAdd} className="hover:text-white text-lg leading-none">+</button>
+                </div>
+                {/* Search Input */}
+                <input
+                    type="text"
+                    placeholder="SEARCH..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && onSearch && onSearch(searchTerm)}
+                    className="bg-black/20 border border-nier-light/30 text-[10px] p-1 text-nier-light outline-none focus:border-nier-light font-mono placeholder:text-nier-light/30"
+                />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+                {instructions.map(inst => (
+                    <div key={inst.id}
+                        onClick={() => onSelect(inst.id)}
+                        className={`p-3 border-b border-nier-light/10 cursor-pointer flex justify-between group ${inst.id === activeInstructionId ? 'bg-nier-light/10 text-white' : 'text-nier-light/70'}`}
+                    >
+                        <div className="truncate text-xs">{inst.name || inst.label}</div>
+                        {inst.id === activeInstructionId && hasUnsavedChanges && <span className="text-[9px] text-yellow-500">*</span>}
+                    </div>
+                ))}
+            </div>
+        </aside>
+    );
+}
