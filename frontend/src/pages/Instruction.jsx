@@ -87,6 +87,14 @@ export default function Instruction({ onWebUpdate }) {
     const [selectedId, setSelectedId] = useState(null);
     const selectedBlock = currentBlocks.find(b => b.id === selectedId);
 
+    // Context Switch (Click Background to Deselect)
+    const handleCanvasClick = (e) => {
+        // Only deselect if clicking the background explicitly
+        if (e.target === e.currentTarget || e.target.classList.contains('canvas-bg')) {
+            setSelectedId(null);
+        }
+    };
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -242,25 +250,65 @@ export default function Instruction({ onWebUpdate }) {
 
     useEffect(() => {
         if (selectedBlock) {
+            // Deep copy param config to allow cancel/validation
+            const initialParams = { ...selectedBlock.parameter_config };
+
+            // Convert kv_pair_list object to array for stable editing
+            if (operatorTemplates[selectedBlock.op_code]?.param_template?.options === 'kv_pair_list') {
+                const pairs = initialParams.options || {};
+                const byteLen = selectedBlock.byte_len || 1;
+
+                // STORAGE FORMAT: { "LABEL": "HEX_VAL" }
+                initialParams._kvArray = Object.entries(pairs).map(([k, v]) => {
+                    // k is Label, v is Value (Hex/Dec String)
+
+                    // Normalize Value (v) to Padded Hex
+                    // Handle legacy cases where v might be the label (if migrating manually, but assuming fresh or compatible data)
+                    // If v is user input, it's likely the string "00".
+
+                    let hexUnpadded = v;
+                    // Try to detect if v looks like a number/hex
+                    if (typeof v === 'number') {
+                        hexUnpadded = v.toString(16).toUpperCase();
+                    } else if (typeof v === 'string') {
+                        const clean = v.trim();
+                        // If it's pure number string, maybe parse?
+                        // But we want to preserve "00" vs "0".
+                        hexUnpadded = clean;
+                    }
+
+                    // Pad it
+                    const padded = (hexUnpadded || "").padStart(byteLen * 2, '0').toUpperCase();
+
+                    return {
+                        id: uuidv4(),
+                        val: padded, // Value
+                        label: k     // Label (Key)
+                    };
+                });
+            }
+
             setTempBlockConfig({
                 ...selectedBlock,
-                // Deep copy param config to allow cancel/validation
-                parameter_config: { ...selectedBlock.parameter_config }
+                parameter_config: initialParams
             });
         } else {
             setTempBlockConfig(null);
         }
     }, [selectedBlock?.id]);
 
+    // HEX INPUT MODE STATE
+    const [hexInputMode, setHexInputMode] = useState('HEX'); // 'HEX', 'DEC', 'BIN'
+
     // Update Temp State (No Propagate)
     const handleTempUpdate = (updates) => {
         setTempBlockConfig(prev => ({ ...prev, ...updates }));
     };
 
-    const handleTempParamUpdate = (key, value) => {
+    const handleTempParamUpdate = (key, val) => {
         setTempBlockConfig(prev => ({
             ...prev,
-            parameter_config: { ...prev.parameter_config, [key]: value }
+            parameter_config: { ...prev.parameter_config, [key]: val }
         }));
     };
 
@@ -269,6 +317,7 @@ export default function Instruction({ onWebUpdate }) {
 
         // Validation Logic
         if (tempBlockConfig.op_code === 'HEX_RAW') {
+            // ... existing HEX logic ...
             const byteLen = tempBlockConfig.byte_len || 1;
             const hexVal = (tempBlockConfig.parameter_config?.hex || "").replace(/\s/g, '');
             if (hexVal.length !== byteLen * 2) {
@@ -276,12 +325,90 @@ export default function Instruction({ onWebUpdate }) {
                 return;
             }
             // Clean format
-            handleUpdateBlock(tempBlockConfig.id, {
+            const updatedBlock = {
                 ...tempBlockConfig,
                 parameter_config: { ...tempBlockConfig.parameter_config, hex: hexVal }
-            });
-        } else {
+            };
+            handleUpdateBlock(tempBlockConfig.id, updatedBlock);
+
+            // AUTO-SAVE on Apply
+            const newFields = currentBlocks.map(b => b.id === tempBlockConfig.id ? updatedBlock : b);
+            const newInst = { ...currentInstruction, fields: newFields };
+
+            setInstructions(prev => prev.map(i => i.id === newInst.id ? newInst : i));
+
+            api.updateInstruction(newInst.id, newInst)
+                .then(() => setStatusMsg('FIELD SAVED'))
+                .catch(() => setStatusMsg('SAVE FAILED'));
+        }
+        // ENUM MAPPING VALIDATION
+        else if (operatorTemplates[tempBlockConfig.op_code]?.param_template?.options === 'kv_pair_list') {
+            const kvArray = tempBlockConfig.parameter_config?._kvArray || [];
+            const byteLen = tempBlockConfig.byte_len || 1;
+
+            const newOptions = {};
+            // Validation Loop
+            for (const item of kvArray) {
+                // Check Label (Key must verify)
+                if (!item.label || !item.label.trim()) continue; // Skip empty labels? Or Error?  Skip is safer for drafts.
+
+                const label = item.label.trim();
+                if (newOptions[label]) {
+                    openConfirm(`Validation Error:\nDuplicate Label "${label}". Labels must be unique (used as Keys).`, () => { });
+                    return;
+                }
+
+                // Check Value
+                if (!item.val) {
+                    openConfirm(`Validation Error:\nLabel "${label}" has no Value.`, () => { });
+                    return;
+                }
+
+                const hexStr = item.val.trim();
+                if (!/^[0-9A-Fa-f]+$/.test(hexStr)) {
+                    openConfirm(`Validation Error:\nValue "${item.val}" must be a valid Hex string.`, () => { });
+                    return;
+                }
+                const expectedChars = byteLen * 2;
+                if (hexStr.length !== expectedChars) {
+                    openConfirm(`Validation Error:\nVal "${hexStr}" has ${hexStr.length} chars.\nExpected ${expectedChars} chars.`, () => { });
+                    return;
+                }
+
+                // Save: Key=Label, Value=Hex
+                newOptions[label] = hexStr.toUpperCase();
+            }
+
+            const finalParams = { ...tempBlockConfig.parameter_config, options: newOptions };
+            delete finalParams._kvArray;
+
+            const updatedBlock = {
+                ...tempBlockConfig,
+                parameter_config: finalParams
+            };
+
+            handleUpdateBlock(tempBlockConfig.id, updatedBlock);
+
+            // AUTO-SAVE Enum
+            const newFields = currentBlocks.map(b => b.id === tempBlockConfig.id ? updatedBlock : b);
+            const newInst = { ...currentInstruction, fields: newFields };
+
+            setInstructions(prev => prev.map(i => i.id === newInst.id ? newInst : i));
+            api.updateInstruction(newInst.id, newInst)
+                .then(() => setStatusMsg('MAPPING SAVED'))
+                .catch(() => setStatusMsg('SAVE FAILED'));
+        }
+        else {
             handleUpdateBlock(tempBlockConfig.id, tempBlockConfig);
+
+            // AUTO-SAVE Default
+            const newFields = currentBlocks.map(b => b.id === tempBlockConfig.id ? tempBlockConfig : b);
+            const newInst = { ...currentInstruction, fields: newFields };
+
+            setInstructions(prev => prev.map(i => i.id === newInst.id ? newInst : i));
+            api.updateInstruction(newInst.id, newInst)
+                .then(() => setStatusMsg('CONFIG SAVED'))
+                .catch(() => setStatusMsg('SAVE FAILED'));
         }
     };
 
@@ -312,19 +439,108 @@ export default function Instruction({ onWebUpdate }) {
             }
 
             if (key === 'options' && configType === 'kv_pair_list') {
+                // Use internal array state for rendering
+                const kvArray = blockState.parameter_config?._kvArray || [];
+
                 return (
-                    <div key={key} className="flex flex-col gap-1 border border-white/10 p-2">
-                        <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
-                        <textarea
-                            className="bg-black/30 border-b border-white/30 text-xs font-mono h-20"
-                            value={typeof val === 'object' ? JSON.stringify(val, null, 2) : (val || '')}
-                            onChange={(e) => {
-                                try {
-                                    const parsed = JSON.parse(e.target.value);
-                                    handleTempParamUpdate(key, parsed);
-                                } catch (err) { /* ignore */ }
-                            }}
-                        />
+                    <div key={key} className="flex flex-col gap-2 border border-nier-light/20 p-2 bg-nier-light/5">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
+                            <button
+                                onClick={() => {
+                                    const newArray = [...kvArray, { id: uuidv4(), val: '', label: '' }];
+                                    handleTempParamUpdate('_kvArray', newArray);
+                                }}
+                                className="text-[9px] bg-nier-light/10 hover:bg-nier-light hover:text-nier-dark px-2 py-0.5 transition-colors"
+                            >
+                                + ADD
+                            </button>
+                        </div>
+                        <div className="flex justify-end mb-2">
+                            <div className="flex text-[9px] gap-1 border border-nier-light/30 p-0.5 bg-black">
+                                {['HEX', 'DEC', 'BIN'].map(m => (
+                                    <button
+                                        key={m}
+                                        onClick={() => setHexInputMode(m)}
+                                        className={`px-2 py-0.5 transition-all ${hexInputMode === m ? 'bg-nier-light text-black font-bold' : 'text-nier-light hover:bg-nier-light/20'}`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                            {kvArray.map((item, idx) => (
+                                <div key={item.id} className="flex gap-1 items-center">
+                                    {/* LABEL (Left) */}
+                                    <input
+                                        type="text"
+                                        placeholder="LABEL"
+                                        value={item.label}
+                                        onChange={(e) => {
+                                            const newArray = [...kvArray];
+                                            newArray[idx].label = e.target.value;
+                                            handleTempParamUpdate('_kvArray', newArray);
+                                        }}
+                                        className="flex-1 bg-transparent border-b border-nier-light/30 text-xs font-mono text-nier-light focus:border-nier-light focus:outline-none text-center"
+                                    />
+                                    <span className="text-nier-light/50">:</span>
+                                    {/* VALUE (Right) */}
+                                    {/* VALUE (Right) */}
+                                    <input
+                                        type="text" // Keep as text to allow smooth typing before validation
+                                        placeholder="VAL"
+                                        value={(() => {
+                                            // Multi-Format Display
+                                            const rawHex = item.val;
+                                            if (!rawHex) return "";
+                                            const val = parseInt(rawHex, 16);
+                                            if (isNaN(val)) return rawHex;
+
+                                            if (hexInputMode === 'DEC') return val.toString(10);
+                                            if (hexInputMode === 'BIN') return val.toString(2).padStart(rawHex.length * 4, '0');
+                                            return rawHex.toUpperCase(); // HEX
+                                        })()}
+                                        onChange={(e) => {
+                                            const input = e.target.value;
+                                            let newHex = "";
+                                            try {
+                                                if (input === "") {
+                                                    newHex = "";
+                                                } else if (hexInputMode === 'DEC') {
+                                                    const d = parseInt(input, 10);
+                                                    if (!isNaN(d)) newHex = d.toString(16).toUpperCase();
+                                                } else if (hexInputMode === 'BIN') {
+                                                    const b = parseInt(input, 2);
+                                                    if (!isNaN(b)) newHex = b.toString(16).toUpperCase();
+                                                } else {
+                                                    // HEX
+                                                    newHex = input.toUpperCase().replace(/[^0-9A-F]/g, '');
+                                                }
+                                                // Update Item Value (Internal Hex)
+                                                const newArray = [...kvArray];
+                                                newArray[idx].val = newHex;
+                                                handleTempParamUpdate('_kvArray', newArray);
+                                            } catch (err) { }
+                                        }}
+                                        className="w-1/3 bg-transparent border-b border-nier-light/30 text-xs font-mono text-nier-light focus:border-nier-light focus:outline-none text-center"
+                                    />
+
+                                    <button
+                                        onClick={() => {
+                                            const newArray = kvArray.filter(x => x.id !== item.id);
+                                            handleTempParamUpdate('_kvArray', newArray);
+                                        }}
+                                        className="text-red-500/50 hover:text-red-500 text-[10px] px-1"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                            {kvArray.length === 0 && (
+                                <div className="text-[9px] opacity-30 text-center py-2">NO MAPPINGS</div>
+                            )}
+                        </div>
                     </div>
                 )
             }
@@ -497,7 +713,10 @@ export default function Instruction({ onWebUpdate }) {
             </aside>
 
             {/* Canvas Area */}
-            <section className="flex-1 relative bg-[url('/grid.png')] bg-repeat opacity-90 overflow-hidden flex flex-col">
+            <section
+                className="flex-1 relative bg-[url('/grid.png')] bg-repeat opacity-90 overflow-hidden flex flex-col canvas-bg"
+                onClick={handleCanvasClick}
+            >
                 <div className="h-10 border-b border-nier-light bg-nier-dark/90 flex items-center justify-between px-4 gap-2 text-xs font-mono opacity-50">
                     <div className="flex items-center gap-2 cursor-pointer hover:text-white" onClick={() => setSelectedId(null)}>
                         <span>KERNEL EDITOR // {currentInstruction?.device_code} / {currentInstruction?.code}</span>
@@ -608,74 +827,122 @@ export default function Instruction({ onWebUpdate }) {
                             {selectedBlock.op_code !== 'HEX_RAW' && renderParamConfig(tempBlockConfig)}
 
                             {/* HEX_RAW Input (Manual) - Simplified Style */}
+                            {/* HEX_RAW Input (Manual) - Multi Format */}
                             {selectedBlock.op_code === 'HEX_RAW' && (
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] opacity-70 uppercase tracking-widest">HEX VALUE</label>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex justify-between items-end">
+                                        <label className="text-[10px] opacity-70 uppercase tracking-widest">VALUE ({hexInputMode})</label>
+                                        <div className="flex text-[10px] gap-1 border border-nier-light/30 p-0.5 bg-black">
+                                            {['HEX', 'DEC', 'BIN'].map(m => (
+                                                <button
+                                                    key={m}
+                                                    onClick={() => setHexInputMode(m)}
+                                                    className={`px-2 py-0.5 transition-all ${hexInputMode === m ? 'bg-nier-light text-black font-bold' : 'text-nier-light hover:bg-nier-light/20'}`}
+                                                >
+                                                    {m}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <input
                                         type="text"
-                                        value={tempBlockConfig.parameter_config?.hex || ""}
-                                        onChange={(e) => handleTempParamUpdate('hex', e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ''))}
-                                        className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide w-full"
-                                        placeholder="00"
+                                        value={(() => {
+                                            // Convert Internal Hex to Display Format
+                                            const rawHex = tempBlockConfig.parameter_config?.hex || "00";
+                                            if (!rawHex) return "";
+                                            const val = parseInt(rawHex, 16);
+                                            if (isNaN(val)) return rawHex;
+
+                                            if (hexInputMode === 'DEC') return val.toString(10);
+                                            if (hexInputMode === 'BIN') return val.toString(2).padStart(rawHex.length * 4, '0');
+                                            return rawHex.toUpperCase(); // HEX
+                                        })()}
+                                        onChange={(e) => {
+                                            const input = e.target.value;
+                                            let newHex = "";
+
+                                            try {
+                                                if (input === "") {
+                                                    // Allow empty during typing
+                                                    newHex = "";
+                                                } else if (hexInputMode === 'DEC') {
+                                                    const d = parseInt(input, 10);
+                                                    if (!isNaN(d)) newHex = d.toString(16).toUpperCase();
+                                                } else if (hexInputMode === 'BIN') {
+                                                    const b = parseInt(input, 2);
+                                                    if (!isNaN(b)) newHex = b.toString(16).toUpperCase();
+                                                } else {
+                                                    // HEX
+                                                    newHex = input.toUpperCase().replace(/[^0-9A-F]/g, '');
+                                                    // Keep layout (spaces) if user wants? No, stricter is better for now. 
+                                                }
+
+                                                handleTempUpdate({
+                                                    parameter_config: { ...tempBlockConfig.parameter_config, hex: newHex }
+                                                });
+                                            } catch (err) { }
+                                        }}
+                                        className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide"
                                     />
-                                    <div className="text-[8px] opacity-50 text-right">
-                                        {(tempBlockConfig.parameter_config?.hex || "").length} / {2 * (tempBlockConfig.byte_len || 1)} chars
+                                    <div className="text-[9px] opacity-30 text-right">
+                                        STORED: {tempBlockConfig.parameter_config?.hex || "00"}
                                     </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Repeat Strategy */}
-                        {(selectedBlock.op_code === 'ARRAY_GROUP' || selectedBlock.op_code === 'STRUCT') && (
-                            <div className="p-3 border border-dashed border-nier-light/50 space-y-3">
-                                <div className="text-[9px] opacity-100 font-bold text-nier-light">重复策略 (REPEAT)</div>
-                                <select
-                                    value={tempBlockConfig.repeat_type || 'NONE'}
-                                    onChange={e => handleTempUpdate({ repeat_type: e.target.value })}
-                                    className="w-full bg-black border border-white/30 text-xs p-1"
+
+                            {/* Repeat Strategy */}
+                            {(selectedBlock.op_code === 'ARRAY_GROUP' || selectedBlock.op_code === 'STRUCT') && (
+                                <div className="p-3 border border-dashed border-nier-light/50 space-y-3">
+                                    <div className="text-[9px] opacity-100 font-bold text-nier-light">重复策略 (REPEAT)</div>
+                                    <select
+                                        value={tempBlockConfig.repeat_type || 'NONE'}
+                                        onChange={e => handleTempUpdate({ repeat_type: e.target.value })}
+                                        className="w-full bg-black border border-white/30 text-xs p-1"
+                                    >
+                                        <option value="NONE">无重复 (Single)</option>
+                                        <option value="FIXED">固定次数 (Fixed)</option>
+                                        <option value="DYNAMIC">动态引用 (Dynamic Ref)</option>
+                                    </select>
+
+                                    {tempBlockConfig.repeat_type === 'FIXED' && (
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[9px]">次数 (COUNT)</label>
+                                            <input type="number" value={tempBlockConfig.repeat_count || 1} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
+                                        </div>
+                                    )}
+                                    {tempBlockConfig.repeat_type === 'DYNAMIC' && (
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[9px]">关联字段 (REF ID)</label>
+                                            <select
+                                                value={tempBlockConfig.repeat_ref_id || ''}
+                                                onChange={e => handleTempUpdate({ repeat_ref_id: e.target.value })}
+                                                className="bg-black border border-white/30 text-xs p-1"
+                                            >
+                                                <option value="">-- SELECT REF --</option>
+                                                {currentBlocks.filter(b => b.id !== selectedBlock.id).map(b => (
+                                                    <option key={b.id} value={b.id}>{b.name} ({b.sequence})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="pt-8 border-t border-nier-light/20 flex flex-col gap-3">
+                                <button
+                                    onClick={applyBlockChanges}
+                                    className="w-full bg-nier-light/20 border border-nier-light text-nier-light hover:bg-nier-light hover:text-black py-2 px-4 uppercase text-xs tracking-widest transition-colors font-bold"
                                 >
-                                    <option value="NONE">无重复 (Single)</option>
-                                    <option value="FIXED">固定次数 (Fixed)</option>
-                                    <option value="DYNAMIC">动态引用 (Dynamic Ref)</option>
-                                </select>
-
-                                {tempBlockConfig.repeat_type === 'FIXED' && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px]">次数 (COUNT)</label>
-                                        <input type="number" value={tempBlockConfig.repeat_count || 1} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
-                                    </div>
-                                )}
-                                {tempBlockConfig.repeat_type === 'DYNAMIC' && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px]">关联字段 (REF ID)</label>
-                                        <select
-                                            value={tempBlockConfig.repeat_ref_id || ''}
-                                            onChange={e => handleTempUpdate({ repeat_ref_id: e.target.value })}
-                                            className="bg-black border border-white/30 text-xs p-1"
-                                        >
-                                            <option value="">-- SELECT REF --</option>
-                                            {currentBlocks.filter(b => b.id !== selectedBlock.id).map(b => (
-                                                <option key={b.id} value={b.id}>{b.name} ({b.sequence})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                    应用配置 (APPLY)
+                                </button>
+                                <button
+                                    onClick={() => promptDeleteBlock(selectedBlock.id)}
+                                    className="w-full border border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white py-2 px-4 uppercase text-xs tracking-widest transition-colors"
+                                >
+                                    删除 (DELETE)
+                                </button>
                             </div>
-                        )}
-
-                        <div className="pt-8 border-t border-nier-light/20 flex flex-col gap-3">
-                            <button
-                                onClick={applyBlockChanges}
-                                className="w-full bg-nier-light/20 border border-nier-light text-nier-light hover:bg-nier-light hover:text-black py-2 px-4 uppercase text-xs tracking-widest transition-colors font-bold"
-                            >
-                                应用配置 (APPLY)
-                            </button>
-                            <button
-                                onClick={() => promptDeleteBlock(selectedBlock.id)}
-                                className="w-full border border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white py-2 px-4 uppercase text-xs tracking-widest transition-colors"
-                            >
-                                删除 (DELETE)
-                            </button>
                         </div>
                     </div>
                 )}

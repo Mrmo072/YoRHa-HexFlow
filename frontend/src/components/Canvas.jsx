@@ -58,7 +58,7 @@ export default function Canvas({ items, setItems, selectedId, onSelect, readOnly
     }
 
     return (
-        <div className="w-full h-full flex items-start justify-start overflow-x-auto p-10 select-none">
+        <div className="w-full h-full flex items-start justify-start overflow-x-auto p-10 select-none canvas-bg">
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
