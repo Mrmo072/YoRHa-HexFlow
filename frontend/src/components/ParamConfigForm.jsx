@@ -305,7 +305,9 @@ export default function ParamConfigForm({
         // 5. Standard Input (Number/Text)
         return (
             <div key={key} className="flex flex-col gap-1">
-                <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
+                <label className="text-[10px] opacity-70 uppercase tracking-widest">
+                    {key === 'max_count' ? 'LOOP COUNT' : key}
+                </label>
                 <input
                     type={configType === 'number' ? 'number' : 'text'}
                     step={configType === 'number' ? 'any' : undefined}

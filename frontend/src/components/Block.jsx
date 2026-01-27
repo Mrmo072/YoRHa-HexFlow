@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function Block({ id, label, name, byte_length, byte_len, type, op_code, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, onClick }) {
+export default function Block({ id, label, name, byte_length, byte_len, type, op_code, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, isGroupActive, onClick }) {
     // Normalize Props (Backend v4 vs v3)
     const displayLabel = name || label || 'BLOCK';
     const length = byte_len || byte_length || 1;
@@ -60,6 +60,11 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
             // NORMAL MODE
             base += getThemeStyle();
 
+            // Active Group Indicator (Open Folder State)
+            if (isGroupActive) {
+                base += " ring-2 ring-nier-light ring-offset-2 ring-offset-nier-dark ";
+            }
+
             if (isSelected) {
                 // User Request: Thick border instead of orange ring (Reserve orange for errors)
                 base += " z-40 border-[3px] border-nier-light shadow-[0_0_15px_rgba(0,0,0,0.2)] scale-[1.02] ";
@@ -76,6 +81,11 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
 
     // Logic for display value
     const displayValue = React.useMemo(() => {
+        // Special Case: Nested Group has no fixed value/size
+        if (op_code === 'ARRAY_GROUP') {
+            return "??"; // User Request: Show ?? instead of DYNAMIC
+        }
+
         // 1. If explicit computed value (from formula engine), use it
         if (parameter_config?.computedValue !== undefined) {
             return parameter_config.computedValue;
@@ -90,7 +100,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
         // 3. Default: "00 " repeated for unknown/unset
         const safeLen = Math.max(1, Math.floor(length));
         return Array(safeLen).fill('00').join(' ');
-    }, [type, effectiveHex, length, parameter_config?.computedValue]);
+    }, [type, effectiveHex, length, parameter_config?.computedValue, op_code]);
 
     return (
         <div
@@ -113,8 +123,10 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
             )}
 
             {/* Header/Label */}
-            <div className="text-[10px] tracking-widest uppercase border-b border-current pb-1 mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
-                {displayLabel}
+            <div className="text-[10px] tracking-widest uppercase border-b border-current pb-1 mb-1 whitespace-nowrap overflow-hidden text-ellipsis flex justify-between">
+                <span>{displayLabel}</span>
+                {/* Visual indicator for Group */}
+                {op_code === 'ARRAY_GROUP' && <span className="opacity-50">::</span>}
             </div>
 
             {/* Byte Indicator centered */}
@@ -122,23 +134,11 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
                 {displayValue}
             </div>
 
-            {/* Nested Children Preview (Recursive) */}
-            {type === 'container' && children && children.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-dashed border-current/30 w-full flex flex-col gap-1 items-center">
-                    <div className="text-[8px] opacity-70 mb-1">CONTENTS ({children.length})</div>
-                    <div className="flex gap-1 flex-wrap justify-center">
-                        {children.map(child => (
-                            <div key={child.id} className="border border-current px-1 py-[2px] text-[8px] opacity-80 whitespace-nowrap">
-                                {child.type === 'fixed' || child.type === 'container' ? (child.name || child.label) : child.type.toUpperCase()}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* Footer info */}
             <div className="text-[9px] flex justify-between opacity-70 mt-1 w-full">
-                <span>{length}B</span>
+                {/* Hide Byte Len for Groups */}
+                <span>{op_code === 'ARRAY_GROUP' ? '' : `${length}B`}</span>
+                {isGroupActive && <span className="text-[8px] animate-pulse">OPEN</span>}
             </div>
 
             {/* Corner Decors (Nier) */}

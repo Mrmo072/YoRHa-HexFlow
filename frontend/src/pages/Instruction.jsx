@@ -22,38 +22,83 @@ export default function Instruction({ onWebUpdate }) {
     // Derived State
     const currentInstruction = instructions.find(i => i.id === activeInstructionId);
 
-    // LIVE FORMULA EVALUATION
-    // We calculate this in a useMemo so it updates whenever fields change
-    const processedFields = React.useMemo(() => {
+    // NESTED GROUPS: Cascade View State
+    // [null] = Root Lane. [null, 'id-1'] = Root -> Group 1.
+    const [activeGroupPath, setActiveGroupPath] = useState([null]);
+
+    // Compute Lanes for Canvas
+    const uiLanes = React.useMemo(() => {
         if (!currentInstruction?.fields) return [];
 
-        const fields = currentInstruction.fields;
+        const lanes = activeGroupPath.map((parentId, depth) => {
+            // Filter blocks for this lane
+            const items = currentInstruction.fields.filter(f => {
+                // Handle "null" vs "undefined" parent_id consistency
+                const pId = f.parent_id || null;
+                return pId === parentId;
+            }).sort((a, b) => a.sequence - b.sequence);
+
+            return {
+                depth,
+                parentId,
+                items
+            };
+        });
+
+        return lanes;
+    }, [currentInstruction?.fields, activeGroupPath]);
+
+    // LIVE FORMULA EVALUATION (Updated for Lanes)
+    // We calculate this in a useMemo so it updates whenever fields change
+    const processedLanes = React.useMemo(() => {
+        // Flatten all fields for convenient lookup map
+        const allFields = currentInstruction?.fields || [];
         const nameToValueMap = {};
-        fields.forEach(f => {
-            nameToValueMap[f.name || f.label] = f.byte_len || 0;
-        });
-
-        return fields.map(f => {
-            if (f.op_code === 'LENGTH_CALC') {
-                const formula = f.parameter_config?.formula;
-                const result = evaluateFormula(formula, nameToValueMap);
-                const hex = formatToHex(result, f.byte_len || 1);
-
-                return {
-                    ...f,
-                    parameter_config: {
-                        ...f.parameter_config,
-                        computedValue: hex
-                    }
-                };
+        allFields.forEach(f => {
+            // For Groups, we use specific "??", as they don't have built-in size
+            if (f.op_code === 'ARRAY_GROUP') {
+                nameToValueMap[f.name || f.label] = "??";
+            } else {
+                nameToValueMap[f.name || f.label] = f.byte_len || 0;
             }
-            return f;
         });
-    }, [currentInstruction?.fields]);
 
-    const currentBlocks = processedFields;
+        // Map lanes to process formula blocks
+        return uiLanes.map(lane => ({
+            ...lane,
+            items: lane.items.map(f => {
+                if (f.op_code === 'LENGTH_CALC') {
+                    const formula = f.parameter_config?.formula;
+                    try {
+                        // Check if formula involves any "unknown" variables
+                        // Simple check: if any referenced field maps to "??"
+                        const involvedVars = formula.match(/\[([^\]]+)\]/g)?.map(m => m.slice(1, -1)) || [];
+                        const hasUnknown = involvedVars.some(v => nameToValueMap[v] === "??");
+
+                        if (hasUnknown) {
+                            return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
+                        }
+
+                        const result = evaluateFormula(formula, nameToValueMap);
+                        const hex = formatToHex(result, f.byte_len || 1);
+                        return { ...f, parameter_config: { ...f.parameter_config, computedValue: hex } };
+                    } catch (e) {
+                        return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
+                    }
+                }
+                // Handle Dynamic Group Sizing Display
+                if (f.op_code === 'ARRAY_GROUP') {
+                    return { ...f, byte_len: '??' }; // Display placeholder
+                }
+                return f;
+            })
+        }));
+    }, [uiLanes, currentInstruction?.fields]);
+
+
     const [selectedId, setSelectedId] = useState(null);
-    const selectedBlock = currentBlocks.find(b => b.id === selectedId);
+    const flattenedProcessed = processedLanes.flatMap(l => l.items);
+    const selectedBlock = flattenedProcessed.find(b => b.id === selectedId);
 
     // Modal State
     const [modalConfig, setModalConfig] = useState({
@@ -211,10 +256,19 @@ export default function Instruction({ onWebUpdate }) {
     const handleAddBlock = (opCode) => {
         if (!currentInstruction) return;
         const template = operatorTemplates[opCode] || operatorTemplates['HEX_RAW'];
+
+        // Determine parent_id based on active lane context
+        // The last ID in activeGroupPath is the current parent (or null)
+        const currentParentId = activeGroupPath[activeGroupPath.length - 1];
+
+        // Find max sequence in current context
+        const siblings = currentInstruction.fields.filter(f => (f.parent_id || null) === currentParentId);
+        const nextSeq = siblings.length > 0 ? Math.max(...siblings.map(s => s.sequence)) + 1 : 0;
+
         const newBlock = {
             id: uuidv4(),
-            parent_id: null,
-            sequence: currentBlocks.length,
+            parent_id: currentParentId, // Set hierarchically
+            sequence: nextSeq,
             op_code: opCode,
             name: template?.name || opCode,
             byte_len: 1,
@@ -222,13 +276,20 @@ export default function Instruction({ onWebUpdate }) {
             children: [],
             repeat_type: 'NONE', repeat_count: 1
         };
+
         if (opCode === 'HEX_RAW') newBlock.parameter_config = { hex: "00" };
+        if (opCode === 'ARRAY_GROUP') {
+            newBlock.byte_len = 0; // Dynamic
+            newBlock.parameter_config = { max_count: 1 };
+        }
         if (template?.param_template?.bits) {
             const defaultBits = Array.isArray(template.param_template.bits) ? template.param_template.bits[0] : 8;
             newBlock.parameter_config = { bits: defaultBits };
             newBlock.byte_len = Math.ceil(defaultBits / 8);
         }
-        updateLocalInstruction({ ...currentInstruction, fields: [...currentBlocks, newBlock] });
+
+        // Add to flat list
+        updateLocalInstruction({ ...currentInstruction, fields: [...currentInstruction.fields, newBlock] });
     };
 
     const promptDeleteBlock = (id) => {
@@ -247,12 +308,12 @@ export default function Instruction({ onWebUpdate }) {
 
     const handleSaveBlock = (updatedBlock) => {
         // 1. Identify if this is a RENAME operation
-        const oldBlock = currentBlocks.find(b => b.id === updatedBlock.id);
+        const oldBlock = currentInstruction.fields.find(b => b.id === updatedBlock.id);
         const oldName = oldBlock?.name || oldBlock?.label;
         const newName = updatedBlock.name || updatedBlock.label;
         const isRename = oldName !== newName;
 
-        let newFields = currentBlocks.map(b => b.id === updatedBlock.id ? updatedBlock : b);
+        let newFields = currentInstruction.fields.map(b => b.id === updatedBlock.id ? updatedBlock : b);
 
         // 2. If renamed, sync all dependent formulas
         if (isRename) {
@@ -373,18 +434,86 @@ export default function Instruction({ onWebUpdate }) {
                 </div>
 
                 <Canvas
-                    items={currentBlocks.map(b => ({
-                        ...b,
-                        type: b.op_code === 'HEX_RAW' ? 'hex' : 'cmd'
-                    }))}
-                    setItems={(newItems) => {
-                        const sequenced = newItems.map((item, idx) => ({ ...item, sequence: idx }));
-                        updateLocalInstruction({ ...currentInstruction, fields: sequenced });
+                    lanes={processedLanes} // Pass ALL lanes
+                    onMoveItem={(itemId, newParentId, newIndex) => {
+                        const allFields = [...currentInstruction.fields];
+                        const itemIndex = allFields.findIndex(f => f.id === itemId);
+                        if (itemIndex === -1) return;
+
+                        const item = { ...allFields[itemIndex] };
+
+                        // 1. Remove from old list
+                        allFields.splice(itemIndex, 1);
+
+                        // 2. Filter siblings of the DESTINATION parent
+                        // We need to insert it into the correct relative position among siblings
+                        const siblings = allFields.filter(f => (f.parent_id || null) === newParentId)
+                            .sort((a, b) => a.sequence - b.sequence);
+
+                        // 3. Insert at newIndex
+                        siblings.splice(newIndex, 0, item);
+
+                        // 4. Update Sequence & Parent for changed siblings
+                        // We need to re-sequence THIS group's siblings
+                        const updatedSiblings = siblings.map((sib, idx) => ({
+                            ...sib,
+                            parent_id: newParentId, // Update parent for the moved item
+                            sequence: idx
+                        }));
+
+                        // 5. Merge back into main list
+                        // We keep non-siblings as is, and replace siblings with updated versions
+                        const finalFields = allFields.filter(f => (f.parent_id || null) !== newParentId);
+                        finalFields.push(...updatedSiblings);
+
+                        updateLocalInstruction({ ...currentInstruction, fields: finalFields });
                     }}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
                     pickingMode={pickingMode}
                     onPickBlock={handlePickBlock}
+                    activeGroupPath={activeGroupPath}
+                    onNavigateGroup={(groupId) => {
+                        // Cascade Navigation Logic
+                        // If clicking a group, we APPEND it to the path if it's not already open
+                        // Or strictly: Path = [null, ...ancestors, groupId]
+
+                        // For now, simplify: Click group -> Drill Down (Add to path)
+                        // Click "Back" (Breadcrumbs handled in Canvas?) -> handled there
+
+                        // Toggle Logic:
+                        // If we click a group that is already the LAST item in path -> Close it? (Go up)
+                        // If we click a group which is NOT the last -> Open it (Append)
+
+                        // But wait, "Cascade" means showing ALL levels.
+                        // If I click a group in Lane 0, Lane 1 opens.
+                        // If I click a group in Lane 1, Lane 2 opens.
+
+                        // We need to truncate the path if we click an earlier lane? 
+                        // We'll let Canvas handle the UI click, but here we update state.
+
+                        const laneIndex = activeGroupPath.indexOf(groupId);
+                        if (laneIndex !== -1) {
+                            // Already active. Maybe collapse children?
+                            // Truncate everything after this ID
+                            setActiveGroupPath(prev => prev.slice(0, laneIndex + 1));
+                        } else {
+                            // Determine depth of this group
+                            // We need to know which lane this group belongs to.
+                            // The block object knows its parent_id.
+
+                            const block = currentInstruction.fields.find(f => f.id === groupId);
+                            const parentId = block?.parent_id || null;
+                            const parentIndex = activeGroupPath.indexOf(parentId);
+
+                            if (parentIndex !== -1) {
+                                // Valid hierarchy. Append this group after its parent.
+                                const newPath = activeGroupPath.slice(0, parentIndex + 1);
+                                newPath.push(groupId);
+                                setActiveGroupPath(newPath);
+                            }
+                        }
+                    }}
                 />
             </section>
 
