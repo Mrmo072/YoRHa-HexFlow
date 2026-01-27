@@ -160,11 +160,17 @@ export default function Instruction({ onWebUpdate }) {
             if (onWebUpdate) onWebUpdate(instData);
         } catch (err) {
             console.error("Failed to load data", err);
-            setStatusMsg('OFFLINE MODE / DB ERROR');
+            setStatusMsg('离线模式 / 数据库错误');
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Reset Group Path when switching instructions
+    useEffect(() => {
+        setActiveGroupPath([null]);
+        setSelectedId(null);
+    }, [activeInstructionId]);
 
     const loadInstructions = async (search = '') => {
         setIsLoading(true);
@@ -200,7 +206,7 @@ export default function Instruction({ onWebUpdate }) {
         const doAdd = async () => {
             const newInstPayload = {
                 device_code: 'DEV-001',
-                name: 'New Instruction',
+                name: `New Instruction ${Math.floor(Math.random() * 1000)}`,
                 code: `CMD - ${Math.floor(Math.random() * 1000)} `,
                 type: 'STATIC',
                 fields: []
@@ -210,15 +216,20 @@ export default function Instruction({ onWebUpdate }) {
                 setInstructions(prev => [...prev, created]);
                 setActiveInstructionId(created.id);
                 setHasUnsavedChanges(false);
-            } catch (e) { }
+            } catch (e) {
+                if (e.response && e.response.status === 400) {
+                    setStatusMsg(e.response.data.detail);
+                    setTimeout(() => setStatusMsg('ERROR'), 2000);
+                }
+            }
         };
-        if (hasUnsavedChanges) openConfirm("Unsaved changes will be lost.\nProceed?", doAdd);
+        if (hasUnsavedChanges) openConfirm("检测到未保存的更改。\n是否覆盖？", doAdd);
         else doAdd();
     };
 
     const handleDeleteInstruction = async (e, id) => {
         e.stopPropagation();
-        openConfirm("WARNING: Delete this instruction permanently?", async () => {
+        openConfirm("警告：确认永久删除此指令？", async () => {
             try {
                 await api.deleteInstruction(id);
                 const rem = instructions.filter(i => i.id !== id);
@@ -238,20 +249,46 @@ export default function Instruction({ onWebUpdate }) {
     const handleSaveChanges = async () => {
         if (!currentInstruction) return;
         try {
-            setStatusMsg('SAVING...');
+            setStatusMsg('保存中...');
             await api.updateInstruction(currentInstruction.id, currentInstruction);
-            setStatusMsg('SAVED');
+            setStatusMsg('已保存');
             setHasUnsavedChanges(false);
             if (onWebUpdate) onWebUpdate(instructions);
             setTimeout(() => setStatusMsg(''), 1000);
-        } catch (e) { setStatusMsg('SAVE FAILED'); }
+        } catch (e) {
+            console.error(e);
+            if (e.response && e.response.status === 400) {
+                setStatusMsg(e.response.data.detail); // Show specific backend error
+                // Maybe use alert/confirm for persistent error?
+                openConfirm(`保存失败：\n${e.response.data.detail}`, () => { });
+            } else {
+                setStatusMsg('保存失败');
+            }
+        }
     };
 
     const handleRevertChanges = async () => {
-        openConfirm("Discard all unsaved changes and reload?", () => {
+        openConfirm("放弃所有更改并重新加载？", () => {
             loadInstructions();
         });
     };
+
+    // Helper: Ensure Unique Name
+    const getUniqueName = (baseName, excludeId = null) => {
+        let name = baseName;
+        let counter = 1;
+        const existingNames = new Set(
+            currentInstruction.fields
+                .filter(f => f.id !== excludeId)
+                .map(f => f.name || f.label)
+        );
+
+        while (existingNames.has(name)) {
+            name = `${baseName}_${counter}`;
+            counter++;
+        }
+        return name;
+    }
 
     const handleAddBlock = (opCode) => {
         if (!currentInstruction) return;
@@ -270,7 +307,7 @@ export default function Instruction({ onWebUpdate }) {
             parent_id: currentParentId, // Set hierarchically
             sequence: nextSeq,
             op_code: opCode,
-            name: template?.name || opCode,
+            name: getUniqueName(template?.name || opCode),
             byte_len: 1,
             parameter_config: {},
             children: [],
@@ -293,7 +330,7 @@ export default function Instruction({ onWebUpdate }) {
     };
 
     const promptDeleteBlock = (id) => {
-        openConfirm("Delete selected block?", () => {
+        openConfirm("删除所选积木？", () => {
             // Functional update to avoid stale closure
             setInstructions(prev => {
                 const active = prev.find(i => i.id === activeInstructionId);
@@ -307,11 +344,26 @@ export default function Instruction({ onWebUpdate }) {
     }
 
     const handleSaveBlock = (updatedBlock) => {
+        // 0. Ensure Name Uniqueness (if name changed)
+        const originalName = currentInstruction.fields.find(f => f.id === updatedBlock.id)?.name;
+        if (updatedBlock.name !== originalName) {
+            const uniqueName = getUniqueName(updatedBlock.name, updatedBlock.id);
+            if (uniqueName !== updatedBlock.name) {
+                updatedBlock.name = uniqueName;
+                // Use explicit modal for "Correction" feedback
+                openConfirm(`名称冲突自动修正：\n已重命名为 "${uniqueName}"`, () => { });
+                // setStatusMsg(`已重命名为: ${uniqueName}`); 
+            }
+        }
+
         // 1. Identify if this is a RENAME operation
         const oldBlock = currentInstruction.fields.find(b => b.id === updatedBlock.id);
         const oldName = oldBlock?.name || oldBlock?.label;
         const newName = updatedBlock.name || updatedBlock.label;
         const isRename = oldName !== newName;
+
+        // Add timestamp to force UI refresh in BlockPropertiesPanel
+        updatedBlock.updatedAt = Date.now();
 
         let newFields = currentInstruction.fields.map(b => b.id === updatedBlock.id ? updatedBlock : b);
 
@@ -343,9 +395,16 @@ export default function Instruction({ onWebUpdate }) {
         setInstructions(prev => prev.map(i => i.id === newInst.id ? newInst : i));
 
         // 4. Async Persist (Auto-Save)
+        // 4. Async Persist (Auto-Save)
         api.updateInstruction(newInst.id, newInst)
-            .then(() => setStatusMsg('CONFIG SAVED'))
-            .catch(() => setStatusMsg('SAVE FAILED'));
+            .then(() => {
+                // Only show "CONFIG SAVED" if we didn't just show a rename warning
+                if (originalName === updatedBlock.name) {
+                    setStatusMsg('已保存');
+                    setTimeout(() => setStatusMsg(''), 1000);
+                }
+            })
+            .catch(() => setStatusMsg('保存失败'));
     }
 
     const handleSelectInstruction = (id) => {

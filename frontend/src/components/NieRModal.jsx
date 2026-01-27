@@ -4,7 +4,7 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
             <div className="w-[400px] border-2 border-nier-light bg-nier-dark relative shadow-[0_0_20px_rgba(218,212,187,0.2)]">
                 {/* Decorative Corners */}
                 <div className="absolute -top-1 -left-1 w-2 h-2 bg-nier-light"></div>
@@ -14,7 +14,7 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
 
                 {/* Header */}
                 <div className="h-8 bg-nier-light/10 border-b border-nier-light flex items-center px-4 justify-between">
-                    <span className="font-bold text-xs tracking-widest text-nier-light">SYSTEM ALERT</span>
+                    <span className="font-bold text-xs tracking-widest text-nier-light">系统警告 (SYSTEM ALERT)</span>
                     <div className="flex gap-1">
                         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                     </div>
@@ -34,14 +34,14 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
                             onClick={onCancel}
                             className="px-6 py-2 border border-nier-light/50 text-nier-light/70 hover:bg-nier-light/10 hover:text-nier-light text-xs tracking-widest transition-all"
                         >
-                            CANCEL
+                            取消 (CANCEL)
                         </button>
                     )}
                     <button
                         onClick={onConfirm}
                         className="px-6 py-2 bg-nier-light text-nier-dark font-bold hover:bg-white hover:scale-105 text-xs tracking-widest transition-all shadow-[0_0_10px_rgba(218,212,187,0.5)]"
                     >
-                        CONFIRM
+                        确认 (CONFIRM)
                     </button>
                 </div>
 

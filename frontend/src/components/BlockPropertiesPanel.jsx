@@ -107,7 +107,7 @@ export default function BlockPropertiesPanel({
             const byteLen = tempBlockConfig.byte_len || 1;
             const hexVal = (tempBlockConfig.parameter_config?.hex || "").replace(/\s/g, '');
             if (hexVal.length !== byteLen * 2) {
-                openConfirm(`Validation Error:\nExpected ${byteLen} bytes (${byteLen * 2} chars).\nGot ${hexVal.length} chars.`, () => { });
+                openConfirm(`校验错误：\n需要 ${byteLen} 字节 (${byteLen * 2} 字符)。\n当前 ${hexVal.length} 字符。`, () => { });
                 return;
             }
             const updatedBlock = {
@@ -126,21 +126,21 @@ export default function BlockPropertiesPanel({
                 if (!item.label || !item.label.trim()) continue;
                 const label = item.label.trim();
                 if (newOptions[label]) {
-                    openConfirm(`Validation Error:\nDuplicate Label "${label}". Labels must be unique.`, () => { });
+                    openConfirm(`校验错误：\n重复标签 "${label}"。标签必须唯一。`, () => { });
                     return;
                 }
                 if (!item.val) {
-                    openConfirm(`Validation Error:\nLabel "${label}" has no Value.`, () => { });
+                    openConfirm(`校验错误：\n标签 "${label}" 没有值。`, () => { });
                     return;
                 }
                 const hexStr = item.val.trim();
                 // Strict Hex Check
                 if (!/^[0-9A-Fa-f]+$/.test(hexStr)) {
-                    openConfirm(`Validation Error:\nValue "${item.val}" must be a valid Hex string.`, () => { });
+                    openConfirm(`校验错误：\n值 "${item.val}" 必须是有效的十六进制字符串。`, () => { });
                     return;
                 }
                 if (hexStr.length !== byteLen * 2) {
-                    openConfirm(`Validation Error:\nVal "${hexStr}" has ${hexStr.length} chars.\nExpected ${byteLen * 2} chars.`, () => { });
+                    openConfirm(`校验错误：\n值 "${hexStr}" 有 ${hexStr.length} 字符。\n需要 ${byteLen * 2} 字符。`, () => { });
                     return;
                 }
                 newOptions[label] = hexStr.toUpperCase();

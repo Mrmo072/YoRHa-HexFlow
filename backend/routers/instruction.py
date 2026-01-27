@@ -18,13 +18,14 @@ router = APIRouter(
 )
 
 # HELPER: Recursive Save
-def save_field_tree(db: Session, field_data: InstructionFieldSchema, instruction_id: str, parent_id: str = None):
+# HELPER: Flat Save (Trust Payload)
+def save_field_flat(db: Session, field_data: InstructionFieldSchema, instruction_id: str):
     f_id = field_data.id or str(uuid.uuid4())
     
     db_field = InstructionField(
         id=f_id,
         instruction_id=instruction_id,
-        parent_id=parent_id,
+        parent_id=field_data.parent_id, # Trust the payload
         sequence=field_data.sequence,
         name=field_data.name,
         op_code=field_data.op_code,
@@ -39,12 +40,7 @@ def save_field_tree(db: Session, field_data: InstructionFieldSchema, instruction
         repeat_count=field_data.repeat_count
     )
     db.add(db_field)
-    db.flush()
-    
-    # Recurse Children
-    if field_data.children:
-        for child in field_data.children:
-            save_field_tree(db, child, instruction_id, f_id)
+
 
 
 @router.get("/", response_model=List[InstructionResponse])
@@ -76,7 +72,12 @@ def get_instruction_detail(id: str, db: Session = Depends(get_db)):
 def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
     i_id = str(uuid.uuid4())
     
-    # 1. Create Instruction
+    # 1. Uniqueness Check
+    existing = db.query(Instruction).filter(or_(Instruction.name == inst.name, Instruction.code == inst.code)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="指令名称或代号必须唯一")
+
+    # 2. Create Instruction
     new_inst = Instruction(
         id=i_id,
         device_code=inst.device_code,
@@ -91,7 +92,7 @@ def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
     # 2. Save Fields
     if inst.fields:
         for f in inst.fields:
-            save_field_tree(db, f, i_id, None)
+            save_field_flat(db, f, i_id)
         db.commit()
     
     db.refresh(new_inst)
@@ -110,6 +111,14 @@ def update_instruction(id: str, updates: InstructionUpdate, db: Session = Depend
     if not db_inst:
         raise HTTPException(status_code=404, detail="Not Found")
     
+    # Uniqueness Check (Exclude self)
+    existing = db.query(Instruction).filter(
+        or_(Instruction.name == updates.name, Instruction.code == updates.code),
+        Instruction.id != id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="指令名称或代号必须唯一")
+
     # Update Metadata
     db_inst.device_code = updates.device_code
     db_inst.name = updates.name
@@ -122,7 +131,7 @@ def update_instruction(id: str, updates: InstructionUpdate, db: Session = Depend
     
     if updates.fields:
         for f in updates.fields:
-            save_field_tree(db, f, id, None)
+            save_field_flat(db, f, id)
     
     db.commit()
     db.refresh(db_inst)

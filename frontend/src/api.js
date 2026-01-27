@@ -1,15 +1,28 @@
 const API_BASE = 'http://localhost:8000';
 
+const handleResponse = async (response) => {
+    const data = await response.json();
+    if (!response.ok) {
+        const error = new Error(data.detail || 'API request failed');
+        error.response = {
+            status: response.status,
+            data: data
+        };
+        throw error;
+    }
+    return data;
+};
+
 export const api = {
     // Instructions
     getInstructions: async (search = '') => {
         const response = await fetch(`${API_BASE}/instructions/?search=${encodeURIComponent(search)}`);
-        return response.json();
+        return handleResponse(response);
     },
 
     getInstruction: async (id) => {
         const response = await fetch(`${API_BASE}/instructions/${id}`);
-        return response.json();
+        return handleResponse(response);
     },
 
     createInstruction: async (data) => {
@@ -18,7 +31,7 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        return response.json();
+        return handleResponse(response);
     },
 
     updateInstruction: async (id, data) => {
@@ -27,19 +40,19 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        return response.json();
+        return handleResponse(response);
     },
 
     deleteInstruction: async (id) => {
         const response = await fetch(`${API_BASE}/instructions/${id}`, {
             method: 'DELETE'
         });
-        return response.json();
+        return handleResponse(response);
     },
 
     // Operators
     getOperatorTemplates: async () => {
         const response = await fetch(`${API_BASE}/operator_templates/`);
-        return response.json();
+        return handleResponse(response);
     }
 };
