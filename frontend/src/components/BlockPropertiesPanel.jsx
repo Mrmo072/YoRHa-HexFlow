@@ -13,7 +13,11 @@ export default function BlockPropertiesPanel({
     onDeleteBlock, // (id) => void
     onSaveBlock, // (updatedBlock) => Promise<void> (Handles Auto-Save)
     openConfirm, // (msg, action) => void
-    onOpenDatePicker // (key, val) => void
+    onOpenDatePicker, // (key, val) => void
+    // Picking Props
+    pickingMode,
+    setPickingMode,
+    onPickBlock
 }) {
     // Local Edit State
     const [tempBlockConfig, setTempBlockConfig] = useState(null);
@@ -66,6 +70,32 @@ export default function BlockPropertiesPanel({
             ...prev,
             parameter_config: { ...prev.parameter_config, [key]: val }
         }));
+    };
+
+    const handleStartPicking = (key, currentRefs) => {
+        setPickingMode({
+            isActive: true,
+            fieldKey: key,
+            currentRefs: currentRefs || [],
+            onUpdateRefs: (newRefs) => {
+                setTempBlockConfig(prev => {
+                    if (!prev) return null; // Safety check
+                    return {
+                        ...prev,
+                        parameter_config: { ...prev.parameter_config, [key]: newRefs }
+                    };
+                });
+            }
+        });
+    };
+
+    const handleStopPicking = () => {
+        setPickingMode({
+            isActive: false,
+            fieldKey: null,
+            currentRefs: [],
+            onUpdateRefs: null
+        });
     };
 
     const handleApply = () => {
@@ -194,6 +224,9 @@ export default function BlockPropertiesPanel({
                                 hexInputMode={hexInputMode}
                                 setHexInputMode={setHexInputMode}
                                 onOpenDatePicker={onOpenDatePicker}
+                                onStartPicking={handleStartPicking}
+                                onStopPicking={handleStopPicking}
+                                pickingMode={pickingMode}
                             />
                         )}
 

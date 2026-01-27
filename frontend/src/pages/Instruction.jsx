@@ -51,6 +51,14 @@ export default function Instruction({ onWebUpdate }) {
         onConfirmCallback: null
     });
 
+    // Picking Mode State (Logic Fields)
+    const [pickingMode, setPickingMode] = useState({
+        isActive: false,
+        fieldKey: null,     // which param is being picked (e.g., 'refs')
+        currentRefs: [],    // list of currently selected IDs
+        onUpdateRefs: null  // callback to save selection
+    });
+
     // Load Initial Data
     useEffect(() => {
         loadData();
@@ -93,6 +101,7 @@ export default function Instruction({ onWebUpdate }) {
 
     // Context Switch
     const handleCanvasClick = (e) => {
+        if (pickingMode.isActive) return; // Don't deselect when picking
         if (e.target === e.currentTarget || e.target.classList.contains('canvas-bg')) {
             setSelectedId(null);
         }
@@ -233,6 +242,15 @@ export default function Instruction({ onWebUpdate }) {
         if (activeInstructionId !== id) setHasUnsavedChanges(false);
     }
 
+    const handlePickBlock = (targetId) => {
+        if (!pickingMode.isActive) return;
+        const currentRefs = pickingMode.currentRefs || [];
+        const isSelected = currentRefs.includes(targetId);
+        let newRefs = isSelected ? currentRefs.filter(id => id !== targetId) : [...currentRefs, targetId];
+        setPickingMode(prev => ({ ...prev, currentRefs: newRefs }));
+        if (pickingMode.onUpdateRefs) pickingMode.onUpdateRefs(newRefs);
+    };
+
     // MAIN RENDER
     return (
         <div className="flex-1 flex overflow-hidden relative">
@@ -306,6 +324,8 @@ export default function Instruction({ onWebUpdate }) {
                     }}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
+                    pickingMode={pickingMode}
+                    onPickBlock={handlePickBlock}
                 />
             </section>
 
@@ -327,6 +347,11 @@ export default function Instruction({ onWebUpdate }) {
                         onConfirmCallback: callback
                     });
                 }}
+
+                // PICKING LOGIC
+                pickingMode={pickingMode}
+                setPickingMode={setPickingMode}
+                onPickBlock={handlePickBlock}
             />
         </div>
     );

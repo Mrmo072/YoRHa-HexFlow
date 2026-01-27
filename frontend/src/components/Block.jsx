@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function Block({ id, label, name, byte_length, byte_len, type, hex_value, parameter_config, children, isSelected, onClick }) {
+export default function Block({ id, label, name, byte_length, byte_len, type, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, onClick }) {
     // Normalize Props (Backend v4 vs v3)
     const displayLabel = name || label || 'BLOCK';
     const length = byte_len || byte_length || 1;
@@ -23,31 +23,46 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
         width: `${Math.max(60, length * 40)}px`, // Increased min-width for label stability
     };
 
-    // Style Mapping
+    // Style Mapping (Restored Theme: nier-light=DARK_TEXT, nier-dark=BEIGE_BG)
     const typeStyles = {
-        hex: 'border-nier-light bg-nier-dark text-nier-light',
-        cmd: 'border-nier-light bg-nier-grid/50 text-nier-light/80', // Default style
-        length: 'border-nier-light bg-nier-grid/50 text-nier-light font-bold',
-        checksum: 'border-nier-light bg-nier-light text-nier-dark font-bold',
+        hex: 'border-nier-light bg-nier-highlight text-nier-dark', // Dark Grey Border, Medium Grey BG, Beige Text (Inverse)
+        cmd: 'border-nier-light bg-nier-dark text-nier-light',      // Dark Border, Beige BG, Dark Text (Standard)
+        length: 'border-nier-light bg-nier-dark text-nier-light font-bold',
+        checksum: 'border-nier-light bg-nier-dark text-nier-light font-bold',
         optional: 'border-dashed border-nier-light text-nier-light opacity-80',
     };
 
     const getClasses = () => {
-        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative transition-colors duration-100 ";
+        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative z-10 transition-colors duration-100 ";
 
-        // Selection overrides other styles for "Hard Invert"
-        if (isSelected) {
-            base += "bg-nier-light/90 text-nier-dark border-transparent z-40 shadow-[0_0_15px_rgba(255,255,255,0.3)] ";
+        // PICKING MODE VISUALS
+        if (isPickMode) {
+            if (isPickRef) {
+                // Selected as REF
+                base += "bg-orange-300 border-nier-light text-nier-light shadow-[0_0_10px_rgba(253,224,71,0.5)] z-40 cursor-pointer ";
+            } else {
+                // Candidate
+                base += "border-dashed border-nier-light/50 text-nier-light/70 hover:bg-orange-200 hover:border-nier-light cursor-alias ";
+            }
+            if (isSelected) {
+                // Active block (initiator of pick) is distinct
+                base += "border-2 border-nier-light opacity-50 cursor-default ";
+            }
         } else {
-            base += typeStyles[type] || typeStyles['cmd'];
-            base += " hover:bg-nier-light hover:text-nier-dark cursor-pointer ";
+            // NORMAL MODE
+            // Selection overrides other styles
+            if (isSelected) {
+                base += "bg-nier-dark text-nier-light border-2 border-nier-light z-40 shadow-[0_0_15px_rgba(0,0,0,0.1)] ";
+            } else {
+                base += typeStyles[type] || typeStyles['cmd'];
+                base += " hover:bg-nier-highlight/20 cursor-pointer ";
+            }
         }
 
         if (isDragging) base += " opacity-50 z-50 ring-2 ring-white scale-105";
 
         return base;
     };
-
 
 
     // Logic for display value
@@ -65,6 +80,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
     return (
         <div
             ref={setNodeRef}
+            id={`block-${id}`} // DOM reference for Canvas lines
             style={style}
             {...attributes}
             {...listeners}
@@ -74,6 +90,13 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
                 onClick?.(e);
             }}
         >
+            {/* Logic Field Indicators */}
+            {isPickRef && (
+                <div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[9px] font-bold px-1 rounded-sm shadow-sm z-50">
+                    REF
+                </div>
+            )}
+
             {/* Header/Label */}
             <div className="text-[10px] tracking-widest uppercase border-b border-current pb-1 mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
                 {displayLabel}

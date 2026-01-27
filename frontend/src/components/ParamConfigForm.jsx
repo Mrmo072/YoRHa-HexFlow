@@ -7,13 +7,50 @@ export default function ParamConfigForm({
     onUpdateParam, // (key, val) => void
     hexInputMode,
     setHexInputMode,
-    onOpenDatePicker // (key, val) => void
+    onOpenDatePicker, // (key, val) => void
+    onStartPicking, // (key, currentRefs) => void
+    onStopPicking, // () => void
+    pickingMode // { isActive, fieldKey, ... }
 }) {
     const template = operatorTemplates[blockState.op_code];
     if (!template || !template.param_template) return null;
 
     return Object.entries(template.param_template).map(([key, configType]) => {
         const val = blockState.parameter_config?.[key];
+
+        // 0. Field Picker (Logic Fields)
+        if (configType === 'field_picker') {
+            const currentRefs = Array.isArray(val) ? val : [];
+            const isPickingThis = pickingMode?.isActive && pickingMode?.fieldKey === key;
+
+            return (
+                <div key={key} className="flex flex-col gap-1 border border-dashed border-nier-light/30 p-2 bg-nier-light/5">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
+                        <div className="text-[9px] font-bold text-yellow-500">{currentRefs.length} REF(S)</div>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            if (isPickingThis) {
+                                // Toggle Off
+                                onStopPicking && onStopPicking();
+                            } else {
+                                onStartPicking(key, currentRefs);
+                            }
+                        }}
+                        className={`w-full py-1 text-[10px] uppercase tracking-widest transition-all border ${isPickingThis ? 'bg-yellow-500 text-black border-yellow-500 animate-pulse font-bold' : 'bg-transparent border-nier-light/50 text-nier-light hover:bg-nier-light hover:text-black'}`}
+                    >
+                        {isPickingThis ? 'STOP PICKING (DONE)' : 'SELECT FIELDS'}
+                    </button>
+                    {isPickingThis && (
+                        <div className="text-[8px] opacity-70 text-center mt-1">
+                            Click blocks on canvas to link/unlink.
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
         // 1. Enum / Array Select
         if (Array.isArray(configType)) {
