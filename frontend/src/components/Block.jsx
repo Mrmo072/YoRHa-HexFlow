@@ -2,7 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function Block({ id, label, name, byte_length, byte_len, type, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, onClick }) {
+export default function Block({ id, label, name, byte_length, byte_len, type, op_code, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, onClick }) {
     // Normalize Props (Backend v4 vs v3)
     const displayLabel = name || label || 'BLOCK';
     const length = byte_len || byte_length || 1;
@@ -23,39 +23,48 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
         width: `${Math.max(60, length * 40)}px`, // Increased min-width for label stability
     };
 
-    // Style Mapping (Restored Theme: nier-light=DARK_TEXT, nier-dark=BEIGE_BG)
-    const typeStyles = {
-        hex: 'border-nier-light bg-nier-highlight text-nier-dark', // Dark Grey Border, Medium Grey BG, Beige Text (Inverse)
-        cmd: 'border-nier-light bg-nier-dark text-nier-light',      // Dark Border, Beige BG, Dark Text (Standard)
-        length: 'border-nier-light bg-nier-dark text-nier-light font-bold',
-        checksum: 'border-nier-light bg-nier-dark text-nier-light font-bold',
-        optional: 'border-dashed border-nier-light text-nier-light opacity-80',
+    // Style Mapping: Based on Information Density
+    // Light (Beige) = Simple/Static
+    // Dark (Charcoal) = Complex/Logic/Structure
+    const getThemeStyle = () => {
+        // Map op_codes or types to specific styles
+        const darkStyle = 'border-nier-light bg-nier-light text-nier-dark font-bold';
+        const lightStyle = 'border-nier-light bg-nier-dark text-nier-light';
+
+        // Check top-level op_code first, then nested, then type
+        const op = op_code || parameter_config?.op_code || type;
+
+        const isDark = [
+            'LENGTH_CALC', 'CHECKSUM_CRC', 'ARRAY_GROUP',
+            'length', 'checksum', 'container', 'group'
+        ].includes(op);
+
+        if (isDark) return darkStyle;
+        if (type === 'optional') return 'border-dashed border-nier-light text-nier-light opacity-80';
+
+        return lightStyle; // Default to Light (HEX_RAW, CMD, etc)
     };
 
     const getClasses = () => {
-        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative z-10 transition-colors duration-100 ";
+        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative z-10 transition-all duration-200 ";
 
-        // PICKING MODE VISUALS
+        // PICKING MODE VISUALS (Always distinct)
         if (isPickMode) {
             if (isPickRef) {
-                // Selected as REF
                 base += "bg-orange-300 border-nier-light text-nier-light shadow-[0_0_10px_rgba(253,224,71,0.5)] z-40 cursor-pointer ";
             } else {
-                // Candidate
                 base += "border-dashed border-nier-light/50 text-nier-light/70 hover:bg-orange-200 hover:border-nier-light cursor-alias ";
             }
-            if (isSelected) {
-                // Active block (initiator of pick) is distinct
-                base += "border-2 border-nier-light opacity-50 cursor-default ";
-            }
+            if (isSelected) base += "border-2 border-nier-light opacity-50 cursor-default ";
         } else {
             // NORMAL MODE
-            // Selection overrides other styles
+            base += getThemeStyle();
+
             if (isSelected) {
-                base += "bg-nier-dark text-nier-light border-2 border-nier-light z-40 shadow-[0_0_15px_rgba(0,0,0,0.1)] ";
+                // User Request: Thick border instead of orange ring (Reserve orange for errors)
+                base += " z-40 border-[3px] border-nier-light shadow-[0_0_15px_rgba(0,0,0,0.2)] scale-[1.02] ";
             } else {
-                base += typeStyles[type] || typeStyles['cmd'];
-                base += " hover:bg-nier-highlight/20 cursor-pointer ";
+                base += " hover:brightness-95 cursor-pointer ";
             }
         }
 
