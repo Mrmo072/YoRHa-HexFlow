@@ -25,7 +25,8 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
 
     // Style Mapping
     const typeStyles = {
-        fixed: 'border-nier-light bg-nier-dark text-nier-light',
+        hex: 'border-nier-light bg-nier-dark text-nier-light',
+        cmd: 'border-nier-light bg-nier-grid/50 text-nier-light/80', // Default style
         length: 'border-nier-light bg-nier-grid/50 text-nier-light font-bold',
         checksum: 'border-nier-light bg-nier-light text-nier-dark font-bold',
         optional: 'border-dashed border-nier-light text-nier-light opacity-80',
@@ -38,7 +39,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
         if (isSelected) {
             base += "bg-nier-light/90 text-nier-dark border-transparent z-40 shadow-[0_0_15px_rgba(255,255,255,0.3)] ";
         } else {
-            base += typeStyles[type] || typeStyles['fixed'];
+            base += typeStyles[type] || typeStyles['cmd'];
             base += " hover:bg-nier-light hover:text-nier-dark cursor-pointer ";
         }
 
@@ -51,7 +52,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
 
     // Logic for display value
     const displayValue = React.useMemo(() => {
-        if (type === 'fixed' && effectiveHex) {
+        if (type === 'hex' && effectiveHex) {
             // Format "AA55" to "AA 55"
             return effectiveHex.replace(/\s/g, '').match(/.{1,2}/g)?.join(' ').toUpperCase() || effectiveHex;
         }
@@ -100,7 +101,6 @@ export default function Block({ id, label, name, byte_length, byte_len, type, he
             {/* Footer info */}
             <div className="text-[9px] flex justify-between opacity-70 mt-1 w-full">
                 <span>{length}B</span>
-                <span>{type?.substr(0, 3).toUpperCase()}</span>
             </div>
 
             {/* Corner Decors (Nier) */}

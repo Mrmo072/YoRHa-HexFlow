@@ -4,6 +4,7 @@ import Canvas from '../components/Canvas';
 import { v4 as uuidv4 } from 'uuid';
 import { api } from '../api';
 import NieRModal from '../components/NieRModal';
+import NieRDatePicker from '../components/NieRDatePicker';
 
 
 
@@ -36,6 +37,9 @@ export default function Instruction({ onWebUpdate }) {
             onCancel: () => setModalConfig(prev => ({ ...prev, isOpen: false }))
         });
     };
+
+    // Date Picker State
+    const [datePickerState, setDatePickerState] = useState({ isOpen: false, paramKey: null, value: null });
 
     // Load Initial Data
     useEffect(() => {
@@ -325,6 +329,21 @@ export default function Instruction({ onWebUpdate }) {
                 )
             }
 
+            if (configType === 'datetime') {
+                return (
+                    <div key={key} className="flex flex-col gap-1">
+                        <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
+                        <div
+                            onClick={() => setDatePickerState({ isOpen: true, paramKey: key, value: val })}
+                            className="bg-transparent border-b border-nier-light/50 py-1 font-mono text-xs text-nier-light cursor-pointer hover:bg-nier-light/10 flex justify-between items-center group/date"
+                        >
+                            <span className={!val ? "opacity-50" : ""}>{val ? val.replace('T', ' ') : 'YYYY-MM-DD HH:MM:SS'}</span>
+                            <span className="opacity-30 text-[8px] group-hover/date:opacity-100 transition-opacity">EDIT</span>
+                        </div>
+                    </div>
+                )
+            }
+
             return (
                 <div key={key} className="flex flex-col gap-1">
                     <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
@@ -395,6 +414,15 @@ export default function Instruction({ onWebUpdate }) {
                 message={modalConfig.message}
                 onConfirm={modalConfig.onConfirm}
                 onCancel={modalConfig.onCancel}
+            />
+            <NieRDatePicker
+                isOpen={datePickerState.isOpen}
+                initialValue={datePickerState.value}
+                onConfirm={(iso) => {
+                    if (datePickerState.paramKey) handleTempParamUpdate(datePickerState.paramKey, iso);
+                    setDatePickerState(prev => ({ ...prev, isOpen: false }));
+                }}
+                onCancel={() => setDatePickerState(prev => ({ ...prev, isOpen: false }))}
             />
 
             {/* Status Overlay */}
@@ -485,7 +513,7 @@ export default function Instruction({ onWebUpdate }) {
                 <Canvas
                     items={currentBlocks.map(b => ({
                         ...b,
-                        type: b.op_code === 'HEX_RAW' ? 'fixed' : 'default'
+                        type: b.op_code === 'HEX_RAW' ? 'hex' : 'cmd'
                     }))}
                     setItems={(newItems) => {
                         const sequenced = newItems.map((item, idx) => ({ ...item, sequence: idx }));
@@ -575,18 +603,18 @@ export default function Instruction({ onWebUpdate }) {
                         </div>
 
                         {/* Dynamic Params */}
-                         <div className="p-3 border border-white/10 bg-white/5 space-y-3">
-                             <div className="text-[9px] opacity-50 border-b border-white/10 pb-1 mb-2">配置参数 (CONFIG)</div>
-                             {selectedBlock.op_code !== 'HEX_RAW' && renderParamConfig(tempBlockConfig)}
-                             
-                             {/* HEX_RAW Input (Manual) - Simplified Style */}
-                             {selectedBlock.op_code === 'HEX_RAW' && (
+                        <div className="p-3 border border-white/10 bg-white/5 space-y-3">
+                            <div className="text-[9px] opacity-50 border-b border-white/10 pb-1 mb-2">配置参数 (CONFIG)</div>
+                            {selectedBlock.op_code !== 'HEX_RAW' && renderParamConfig(tempBlockConfig)}
+
+                            {/* HEX_RAW Input (Manual) - Simplified Style */}
+                            {selectedBlock.op_code === 'HEX_RAW' && (
                                 <div className="flex flex-col gap-1">
                                     <label className="text-[10px] opacity-70 uppercase tracking-widest">HEX VALUE</label>
-                                    <input 
+                                    <input
                                         type="text"
-                                        value={tempBlockConfig.parameter_config?.hex || ""} 
-                                        onChange={(e) => handleTempParamUpdate('hex', e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ''))} 
+                                        value={tempBlockConfig.parameter_config?.hex || ""}
+                                        onChange={(e) => handleTempParamUpdate('hex', e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ''))}
                                         className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide w-full"
                                         placeholder="00"
                                     />
@@ -594,49 +622,49 @@ export default function Instruction({ onWebUpdate }) {
                                         {(tempBlockConfig.parameter_config?.hex || "").length} / {2 * (tempBlockConfig.byte_len || 1)} chars
                                     </div>
                                 </div>
-                             )}
-                         </div>
+                            )}
+                        </div>
 
                         {/* Repeat Strategy */}
                         {(selectedBlock.op_code === 'ARRAY_GROUP' || selectedBlock.op_code === 'STRUCT') && (
-                             <div className="p-3 border border-dashed border-nier-light/50 space-y-3">
-                                 <div className="text-[9px] opacity-100 font-bold text-nier-light">重复策略 (REPEAT)</div>
-                                 <select 
+                            <div className="p-3 border border-dashed border-nier-light/50 space-y-3">
+                                <div className="text-[9px] opacity-100 font-bold text-nier-light">重复策略 (REPEAT)</div>
+                                <select
                                     value={tempBlockConfig.repeat_type || 'NONE'}
                                     onChange={e => handleTempUpdate({ repeat_type: e.target.value })}
                                     className="w-full bg-black border border-white/30 text-xs p-1"
-                                 >
-                                     <option value="NONE">无重复 (Single)</option>
-                                     <option value="FIXED">固定次数 (Fixed)</option>
-                                     <option value="DYNAMIC">动态引用 (Dynamic Ref)</option>
-                                 </select>
-                                 
-                                 {tempBlockConfig.repeat_type === 'FIXED' && (
-                                     <div className="flex flex-col gap-1">
+                                >
+                                    <option value="NONE">无重复 (Single)</option>
+                                    <option value="FIXED">固定次数 (Fixed)</option>
+                                    <option value="DYNAMIC">动态引用 (Dynamic Ref)</option>
+                                </select>
+
+                                {tempBlockConfig.repeat_type === 'FIXED' && (
+                                    <div className="flex flex-col gap-1">
                                         <label className="text-[9px]">次数 (COUNT)</label>
-                                        <input type="number" value={tempBlockConfig.repeat_count||1} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
-                                     </div>
-                                 )}
-                                 {tempBlockConfig.repeat_type === 'DYNAMIC' && (
-                                      <div className="flex flex-col gap-1">
+                                        <input type="number" value={tempBlockConfig.repeat_count || 1} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
+                                    </div>
+                                )}
+                                {tempBlockConfig.repeat_type === 'DYNAMIC' && (
+                                    <div className="flex flex-col gap-1">
                                         <label className="text-[9px]">关联字段 (REF ID)</label>
-                                         <select 
+                                        <select
                                             value={tempBlockConfig.repeat_ref_id || ''}
                                             onChange={e => handleTempUpdate({ repeat_ref_id: e.target.value })}
                                             className="bg-black border border-white/30 text-xs p-1"
-                                         >
+                                        >
                                             <option value="">-- SELECT REF --</option>
                                             {currentBlocks.filter(b => b.id !== selectedBlock.id).map(b => (
                                                 <option key={b.id} value={b.id}>{b.name} ({b.sequence})</option>
                                             ))}
-                                         </select>
-                                     </div>
-                                 )}
-                             </div>
-                         )}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="pt-8 border-t border-nier-light/20 flex flex-col gap-3">
-                             <button
+                            <button
                                 onClick={applyBlockChanges}
                                 className="w-full bg-nier-light/20 border border-nier-light text-nier-light hover:bg-nier-light hover:text-black py-2 px-4 uppercase text-xs tracking-widest transition-colors font-bold"
                             >
