@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { OP_CODES } from '../constants';
 
 export default function Block({ id, label, name, byte_length, byte_len, type, op_code, hex_value, parameter_config, children, isSelected, isPickMode, isPickRef, isGroupActive, onClick }) {
     // Normalize Props (Backend v4 vs v3)
@@ -35,7 +36,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
         const op = op_code || parameter_config?.op_code || type;
 
         const isDark = [
-            'LENGTH_CALC', 'CHECKSUM_CRC', 'ARRAY_GROUP',
+            OP_CODES.LENGTH_CALC, OP_CODES.CHECKSUM_CRC, OP_CODES.ARRAY_GROUP,
             'length', 'checksum', 'container', 'group'
         ].includes(op);
 
@@ -82,7 +83,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
     // Logic for display value
     const displayValue = React.useMemo(() => {
         // Special Case: Nested Group has no fixed value/size
-        if (op_code === 'ARRAY_GROUP') {
+        if (op_code === OP_CODES.ARRAY_GROUP) {
             return "??"; // User Request: Show ?? instead of DYNAMIC
         }
 

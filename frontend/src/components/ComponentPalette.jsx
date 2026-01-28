@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { OP_CODES, OP_PRIORITY, CATEGORY_ORDER } from '../constants';
 
 export default function ComponentPalette({ operatorTemplates, onAddBlock }) {
     // Grouping Logic
@@ -10,14 +11,14 @@ export default function ComponentPalette({ operatorTemplates, onAddBlock }) {
         });
 
         // Sort Config
-        const catOrder = ['PRIMITIVE', 'STRUCTURE', 'CONTROL'];
-        const opPriority = ['HEX_RAW', 'UINT8', 'UINT16', 'UINT32', 'INT8', 'INT16', 'STRING_ASCII', 'ENUM_U8'];
+        const catOrder = CATEGORY_ORDER;
+        const opPriority = OP_PRIORITY;
 
         // Sort items per category
         Object.keys(groups).forEach(cat => {
             groups[cat].sort((a, b) => {
-                if (a.op_code === 'HEX_RAW') return -1;
-                if (b.op_code === 'HEX_RAW') return 1;
+                if (a.op_code === OP_CODES.HEX_RAW) return -1;
+                if (b.op_code === OP_CODES.HEX_RAW) return 1;
 
                 const idxA = opPriority.indexOf(a.op_code);
                 const idxB = opPriority.indexOf(b.op_code);

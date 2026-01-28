@@ -1,0 +1,47 @@
+/**
+ * Global Constants for YoRHa Application
+ */
+
+export const OP_CODES = {
+    HEX_RAW: 'HEX_RAW',
+    UINT8: 'UINT8',
+    UINT16: 'UINT16',
+    UINT32: 'UINT32',
+    INT8: 'INT8',
+    INT16: 'INT16',
+    STRING_ASCII: 'STRING_ASCII',
+    ENUM_U8: 'ENUM_U8',
+
+    // Structure
+    ARRAY_GROUP: 'ARRAY_GROUP',
+    STRUCT_DEF: 'STRUCT_DEF',
+
+    // Logic
+    LENGTH_CALC: 'LENGTH_CALC',
+    CHECKSUM_CRC: 'CHECKSUM_CRC',
+    TIME_ACCUMULATOR: 'TIME_ACCUMULATOR',
+    AUTO_COUNTER: 'AUTO_COUNTER'
+};
+
+export const CATEGORIES = {
+    PRIMITIVE: 'PRIMITIVE',
+    STRUCTURE: 'STRUCTURE',
+    CONTROL: 'CONTROL'
+};
+
+export const OP_PRIORITY = [
+    OP_CODES.HEX_RAW,
+    OP_CODES.UINT8,
+    OP_CODES.UINT16,
+    OP_CODES.UINT32,
+    OP_CODES.INT8,
+    OP_CODES.INT16,
+    OP_CODES.STRING_ASCII,
+    OP_CODES.ENUM_U8
+];
+
+export const CATEGORY_ORDER = [
+    CATEGORIES.PRIMITIVE,
+    CATEGORIES.STRUCTURE,
+    CATEGORIES.CONTROL
+];
