@@ -48,7 +48,8 @@ export default function Canvas({
     activeGroupPath = [],
     onNavigateGroup,
     focusedLaneIndex = 0,
-    onSetFocusedLane
+    onSetFocusedLane,
+    isModalOpen = false
 }) {
 
     const [activeDragId, setActiveDragId] = useState(null);
@@ -65,6 +66,11 @@ export default function Canvas({
         }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
+            keyboardCodes: {
+                start: isModalOpen ? [] : ['Space', 'Enter'],
+                cancel: ['Escape'],
+                end: ['Space', 'Enter']
+            }
         })
     );
 

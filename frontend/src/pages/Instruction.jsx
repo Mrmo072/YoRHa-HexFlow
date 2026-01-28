@@ -618,6 +618,7 @@ export default function Instruction({ onWebUpdate }) {
                     }}
                     focusedLaneIndex={focusedLaneIndex}
                     onSetFocusedLane={setFocusedLaneIndex}
+                    isModalOpen={modalConfig.isOpen}
                 />
             </section>
 
