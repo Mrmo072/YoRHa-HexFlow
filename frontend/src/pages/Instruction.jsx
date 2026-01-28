@@ -231,7 +231,8 @@ export default function Instruction({ onWebUpdate }) {
 
     // Context Switch
     const handleCanvasClick = (e) => {
-        if (pickingMode.isActive) return; // Don't deselect when picking
+        // Redundant with Canvas internal click but good fallback
+        if (pickingMode.isActive) return;
         if (e.target === e.currentTarget || e.target.classList.contains('canvas-bg')) {
             setSelectedId(null);
         }
@@ -241,13 +242,21 @@ export default function Instruction({ onWebUpdate }) {
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+            // ESC to cancel picking OR deselect
+            if (e.key === 'Escape') {
+                if (pickingMode.isActive) {
+                    setPickingMode({ isActive: false, fieldKey: null, currentRefs: [], onUpdateRefs: null });
+                } else if (selectedId) {
+                    setSelectedId(null);
+                }
+            }
             if (e.key === 'Delete' && selectedId && !modalConfig.isOpen) {
                 promptDeleteBlock(selectedId);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedId, modalConfig.isOpen]);
+    }, [selectedId, modalConfig.isOpen, pickingMode.isActive]);
 
     // Actions
     const handleAddInstruction = async () => {
@@ -596,6 +605,7 @@ export default function Instruction({ onWebUpdate }) {
                     onSelect={setSelectedId}
                     pickingMode={pickingMode}
                     onPickBlock={handlePickBlock}
+                    onCancelPick={() => setPickingMode({ isActive: false, fieldKey: null, currentRefs: [], onUpdateRefs: null })}
                     focusedParentId={focusedParentId}
                     onSetFocusedLane={(laneParentId) => setFocusedParentId(laneParentId)}
                     isModalOpen={modalConfig.isOpen}
