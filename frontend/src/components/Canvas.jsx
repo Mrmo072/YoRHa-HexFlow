@@ -18,7 +18,7 @@ import {
 import Block from './Block';
 
 // Lane Component to handle Droppable logic cleanly
-function LaneContainer({ lane, index, children, isActiveLane, onNavigateGroup }) {
+function LaneContainer({ lane, index, children, isActiveLane, onNavigateGroup, onSetFocusedLane }) {
     const { setNodeRef } = useDroppable({
         id: `lane-container-${index}`,
         data: { laneIndex: index, parentId: lane.parentId }
@@ -27,7 +27,8 @@ function LaneContainer({ lane, index, children, isActiveLane, onNavigateGroup })
     return (
         <div
             ref={setNodeRef}
-            className={`relative flex gap-1 items-end min-w-max p-4 border border-dashed min-h-[140px] transition-colors duration-300
+            onClick={() => onSetFocusedLane && onSetFocusedLane(index)}
+            className={`relative flex gap-1 items-end min-w-max p-4 border border-dashed min-h-[140px] transition-colors duration-300 cursor-pointer
                 ${isActiveLane ? 'border-nier-light/40 bg-nier-light/5 opacity-100 grayscale-0 scale-[1.01]' : 'border-nier-light/10 bg-transparent opacity-80 grayscale scale-100'}
             `}
         >
@@ -45,7 +46,9 @@ export default function Canvas({
     pickingMode,
     onPickBlock,
     activeGroupPath = [],
-    onNavigateGroup
+    onNavigateGroup,
+    focusedLaneIndex = 0,
+    onSetFocusedLane
 }) {
 
     const [activeDragId, setActiveDragId] = useState(null);
@@ -259,7 +262,10 @@ export default function Canvas({
         // localLanes will be synced with props via Instruction.jsx -> useEffect
     };
 
-    const handleBlockClick = (id, opCode) => {
+    const handleBlockClick = (id, opCode, laneIndex) => {
+        // Update focus to the lane containing the clicked block
+        onSetFocusedLane && onSetFocusedLane(laneIndex);
+
         if (pickingMode?.isActive) {
             onPickBlock && onPickBlock(id);
         } else {
@@ -308,10 +314,10 @@ export default function Canvas({
                 {localLanes.map((lane, index) => {
                     // Logic: 
                     // 1. If dragging, Focus = dragOverLaneIndex
-                    // 2. If not dragging, Focus = last lane (deepest)
+                    // 2. If not dragging, Focus = focusedLaneIndex
                     const isFocus = activeDragId
                         ? (dragOverLaneIndex === index)
-                        : (index === localLanes.length - 1);
+                        : (focusedLaneIndex === index);
 
                     const isRoot = index === 0;
 
@@ -342,6 +348,7 @@ export default function Canvas({
                                 index={index}
                                 isActiveLane={isFocus} // Pass calculated focus
                                 onNavigateGroup={onNavigateGroup}
+                                onSetFocusedLane={onSetFocusedLane}
                             >
                                 <SortableContext
                                     id={`lane-context-${lane.depth}`}
@@ -355,7 +362,7 @@ export default function Canvas({
                                             isSelected={selectedId === item.id}
                                             isPickMode={pickingMode?.isActive}
                                             isPickRef={pickingMode?.currentRefs?.includes(item.id)}
-                                            onClick={() => handleBlockClick(item.id, item.op_code)}
+                                            onClick={() => handleBlockClick(item.id, item.op_code, index)}
                                             isGroupActive={activeGroupPath.includes(item.id)}
                                         />
                                     ))}

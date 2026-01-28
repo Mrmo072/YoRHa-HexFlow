@@ -25,6 +25,7 @@ export default function Instruction({ onWebUpdate }) {
     // NESTED GROUPS: Cascade View State
     // [null] = Root Lane. [null, 'id-1'] = Root -> Group 1.
     const [activeGroupPath, setActiveGroupPath] = useState([null]);
+    const [focusedLaneIndex, setFocusedLaneIndex] = useState(0);
 
     // Compute Lanes for Canvas
     const uiLanes = React.useMemo(() => {
@@ -214,6 +215,7 @@ export default function Instruction({ onWebUpdate }) {
         }
 
         setActiveGroupPath(newPath);
+        setFocusedLaneIndex(newPath.length - 1);
         setSelectedId(null);
     }, [activeInstructionId, instructions]);
 
@@ -339,9 +341,8 @@ export default function Instruction({ onWebUpdate }) {
         if (!currentInstruction) return;
         const template = operatorTemplates[opCode] || operatorTemplates['HEX_RAW'];
 
-        // Determine parent_id based on active lane context
-        // The last ID in activeGroupPath is the current parent (or null)
-        const currentParentId = activeGroupPath[activeGroupPath.length - 1];
+        // Determine parent_id based on FOCUSED lane context
+        const currentParentId = activeGroupPath[focusedLaneIndex];
 
         // Find max sequence in current context
         const siblings = currentInstruction.fields.filter(f => (f.parent_id || null) === currentParentId);
@@ -595,46 +596,28 @@ export default function Instruction({ onWebUpdate }) {
                     onPickBlock={handlePickBlock}
                     activeGroupPath={activeGroupPath}
                     onNavigateGroup={(groupId) => {
-                        // Cascade Navigation Logic
-                        // If clicking a group, we APPEND it to the path if it's not already open
-                        // Or strictly: Path = [null, ...ancestors, groupId]
-
-                        // For now, simplify: Click group -> Drill Down (Add to path)
-                        // Click "Back" (Breadcrumbs handled in Canvas?) -> handled there
-
-                        // Toggle Logic:
-                        // If we click a group that is already the LAST item in path -> Close it? (Go up)
-                        // If we click a group which is NOT the last -> Open it (Append)
-
-                        // But wait, "Cascade" means showing ALL levels.
-                        // If I click a group in Lane 0, Lane 1 opens.
-                        // If I click a group in Lane 1, Lane 2 opens.
-
-                        // We need to truncate the path if we click an earlier lane? 
-                        // We'll let Canvas handle the UI click, but here we update state.
-
-                        const laneIndex = activeGroupPath.indexOf(groupId);
-                        if (laneIndex !== -1) {
-                            // Already active. Maybe collapse children?
-                            // Truncate everything after this ID
-                            setActiveGroupPath(prev => prev.slice(0, laneIndex + 1));
+                        const laneIndexInPath = activeGroupPath.indexOf(groupId);
+                        if (laneIndexInPath !== -1) {
+                            // If it's already in path, we switch focus to its CHILD lane (the lane it opens)
+                            // In our logic, activeGroupPath[1] is the content of the group clicked in Lane 0.
+                            // So Lane 1 should be focused.
+                            setFocusedLaneIndex(laneIndexInPath + 1);
                         } else {
-                            // Determine depth of this group
-                            // We need to know which lane this group belongs to.
-                            // The block object knows its parent_id.
-
+                            // Drilling down: Append to path and focus the new last lane
                             const block = currentInstruction.fields.find(f => f.id === groupId);
                             const parentId = block?.parent_id || null;
                             const parentIndex = activeGroupPath.indexOf(parentId);
 
                             if (parentIndex !== -1) {
-                                // Valid hierarchy. Append this group after its parent.
                                 const newPath = activeGroupPath.slice(0, parentIndex + 1);
                                 newPath.push(groupId);
                                 setActiveGroupPath(newPath);
+                                setFocusedLaneIndex(newPath.length - 1);
                             }
                         }
                     }}
+                    focusedLaneIndex={focusedLaneIndex}
+                    onSetFocusedLane={setFocusedLaneIndex}
                 />
             </section>
 
