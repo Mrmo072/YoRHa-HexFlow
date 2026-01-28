@@ -22,32 +22,54 @@ export default function Instruction({ onWebUpdate }) {
     // Derived State
     const currentInstruction = instructions.find(i => i.id === activeInstructionId);
 
-    // NESTED GROUPS: Cascade View State
-    // [null] = Root Lane. [null, 'id-1'] = Root -> Group 1.
-    const [activeGroupPath, setActiveGroupPath] = useState([null]);
-    const [focusedLaneIndex, setFocusedLaneIndex] = useState(0);
+    // NESTED GROUPS: Tree View State
+    // expandedGroupIds: Array of IDs that are currently expanded.
+    const [expandedGroupIds, setExpandedGroupIds] = useState([]);
+    // focusedParentId: The 'parentId' of the lane currently in focus. null = Root.
+    const [focusedParentId, setFocusedParentId] = useState(null);
 
-    // Compute Lanes for Canvas
+    // Compute Lanes for Canvas (Recursive Tree)
     const uiLanes = React.useMemo(() => {
         if (!currentInstruction?.fields) return [];
 
-        const lanes = activeGroupPath.map((parentId, depth) => {
-            // Filter blocks for this lane
-            const items = currentInstruction.fields.filter(f => {
-                // Handle "null" vs "undefined" parent_id consistency
+        const lanes = [];
+        const allFields = currentInstruction.fields;
+
+        // Recursive helper to build lanes in DFS order
+        const buildLanes = (parentId, depth) => {
+            // 1. Find blocks in this container
+            const items = allFields.filter(f => {
                 const pId = f.parent_id || null;
                 return pId === parentId;
             }).sort((a, b) => a.sequence - b.sequence);
 
-            return {
+            // 2. Find Parent Name for display
+            let parentName = "ROOT SEQUENCE";
+            if (parentId) {
+                const parentBlock = allFields.find(f => f.id === parentId);
+                parentName = parentBlock ? (parentBlock.name || parentBlock.label) : "UNKNOWN GROUP";
+            }
+
+            // 3. Add this lane
+            lanes.push({
                 depth,
                 parentId,
+                parentName,
                 items
-            };
-        });
+            });
 
+            // 4. Find expands within this lane
+            items.forEach(item => {
+                if (item.op_code === 'ARRAY_GROUP' && expandedGroupIds.includes(item.id)) {
+                    buildLanes(item.id, depth + 1);
+                }
+            });
+        };
+
+        buildLanes(null, 0); // Start at Root
         return lanes;
-    }, [currentInstruction?.fields, activeGroupPath]);
+
+    }, [currentInstruction?.fields, expandedGroupIds]);
 
     // LIVE FORMULA EVALUATION (Updated for Lanes)
     // We calculate this in a useMemo so it updates whenever fields change
@@ -101,7 +123,8 @@ export default function Instruction({ onWebUpdate }) {
                 }
                 // Handle Dynamic Group Sizing Display
                 if (f.op_code === 'ARRAY_GROUP') {
-                    return { ...f, byte_len: '??' }; // Display placeholder
+                    // Force byte_len to 0 for logic transparency, though display is "??"
+                    return { ...f, byte_len: 0, _displayLen: '??' };
                 }
                 return f;
             })
@@ -181,41 +204,19 @@ export default function Instruction({ onWebUpdate }) {
 
     // Reset Group Path when switching instructions
     // Reset Group Path when switching instructions & Default Expand All
+    // Reset Group & Focus whenever instruction changes
     useEffect(() => {
-        if (!activeInstructionId) {
-            setActiveGroupPath([null]);
-            return;
-        }
-
+        // Find current instruction to auto-expand all groups
         const inst = instructions.find(i => i.id === activeInstructionId);
-        if (!inst || !inst.fields) {
-            setActiveGroupPath([null]);
-            setSelectedId(null);
-            return;
+        if (inst && inst.fields) {
+            const allGroupIds = inst.fields
+                .filter(f => f.op_code === 'ARRAY_GROUP')
+                .map(f => f.id);
+            setExpandedGroupIds(allGroupIds);
+        } else {
+            setExpandedGroupIds([]);
         }
-
-        // Greedy Expansion: Recursively find the first GROUP in each layer
-        const newPath = [null];
-        let currentParent = null;
-        let safeCounter = 0;
-
-        while (safeCounter < 10) { // Limit depth to avoid infinite loop
-            safeCounter++;
-            const children = inst.fields
-                .filter(f => (f.parent_id || null) === currentParent)
-                .sort((a, b) => a.sequence - b.sequence);
-
-            const firstGroup = children.find(f => f.op_code === 'ARRAY_GROUP');
-            if (firstGroup) {
-                newPath.push(firstGroup.id);
-                currentParent = firstGroup.id;
-            } else {
-                break;
-            }
-        }
-
-        setActiveGroupPath(newPath);
-        setFocusedLaneIndex(newPath.length - 1);
+        setFocusedParentId(null);
         setSelectedId(null);
     }, [activeInstructionId, instructions]);
 
@@ -342,7 +343,8 @@ export default function Instruction({ onWebUpdate }) {
         const template = operatorTemplates[opCode] || operatorTemplates['HEX_RAW'];
 
         // Determine parent_id based on FOCUSED lane context
-        const currentParentId = activeGroupPath[focusedLaneIndex];
+        // focusedParentId is now the direct ID of the container
+        const currentParentId = focusedParentId;
 
         // Find max sequence in current context
         const siblings = currentInstruction.fields.filter(f => (f.parent_id || null) === currentParentId);
@@ -594,31 +596,28 @@ export default function Instruction({ onWebUpdate }) {
                     onSelect={setSelectedId}
                     pickingMode={pickingMode}
                     onPickBlock={handlePickBlock}
-                    activeGroupPath={activeGroupPath}
-                    onNavigateGroup={(groupId) => {
-                        const laneIndexInPath = activeGroupPath.indexOf(groupId);
-                        if (laneIndexInPath !== -1) {
-                            // If it's already in path, we switch focus to its CHILD lane (the lane it opens)
-                            // In our logic, activeGroupPath[1] is the content of the group clicked in Lane 0.
-                            // So Lane 1 should be focused.
-                            setFocusedLaneIndex(laneIndexInPath + 1);
-                        } else {
-                            // Drilling down: Append to path and focus the new last lane
-                            const block = currentInstruction.fields.find(f => f.id === groupId);
-                            const parentId = block?.parent_id || null;
-                            const parentIndex = activeGroupPath.indexOf(parentId);
-
-                            if (parentIndex !== -1) {
-                                const newPath = activeGroupPath.slice(0, parentIndex + 1);
-                                newPath.push(groupId);
-                                setActiveGroupPath(newPath);
-                                setFocusedLaneIndex(newPath.length - 1);
-                            }
-                        }
-                    }}
-                    focusedLaneIndex={focusedLaneIndex}
-                    onSetFocusedLane={setFocusedLaneIndex}
+                    focusedParentId={focusedParentId}
+                    onSetFocusedLane={(laneParentId) => setFocusedParentId(laneParentId)}
                     isModalOpen={modalConfig.isOpen}
+                    expandedGroupIds={expandedGroupIds}
+                    onNavigateGroup={(groupId) => {
+                        setExpandedGroupIds(prev => {
+                            const next = [...prev];
+                            const idx = next.indexOf(groupId);
+                            if (idx !== -1) {
+                                // Collapse
+                                next.splice(idx, 1);
+                                // If we collapse the group we were focused on? ideally move focus up. 
+                                // But simplicity first.
+                            } else {
+                                // Expand
+                                next.push(groupId);
+                                // Auto-focus the new group content
+                                setFocusedParentId(groupId);
+                            }
+                            return next;
+                        });
+                    }}
                 />
             </section>
 

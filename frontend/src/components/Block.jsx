@@ -130,12 +130,12 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
             </div>
 
             {/* Byte Indicator centered */}
-            <div className="flex-1 flex items-center justify-center text-sm font-bold break-all text-center leading-tight overflow-hidden px-1">
+            <div className="flex-1 flex items-center justify-center text-sm font-bold font-mono break-all text-center leading-tight overflow-hidden px-1">
                 {displayValue}
             </div>
 
             {/* Footer info */}
-            <div className="text-[9px] flex justify-between opacity-70 mt-1 w-full">
+            <div className="text-[9px] flex justify-between opacity-70 mt-1 w-full min-h-[14px]">
                 {/* Hide Byte Len for Groups */}
                 <span>{op_code === 'ARRAY_GROUP' ? '' : `${length}B`}</span>
                 {isGroupActive && <span className="text-[8px] animate-pulse">OPEN</span>}
