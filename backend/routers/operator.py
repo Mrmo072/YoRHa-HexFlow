@@ -26,8 +26,8 @@ SEED_TEMPLATES = [
     {"op_code": "BCD_CODE", "name": "BCD码", "category": "ENCODING", "description": "Binary Coded Decimal", "param_template": {"bytes": "number"}},
 
     # DYNAMIC
-    {"op_code": "TIME_ACCUMULATOR", "name": "时间累积", "category": "DYNAMIC", "description": "Current - BaseTime", "param_template": {"base_time": "datetime"}},
-    {"op_code": "AUTO_COUNTER", "name": "自动计数", "category": "DYNAMIC", "description": "(Current+Step)%Max", "param_template": {"step": 1, "max": 65535}},
+    {"op_code": "TIME_ACCUMULATOR", "name": "时间累积", "category": "DYNAMIC", "description": "Current - BaseTime", "param_template": {"base_time": "1980-01-01T00:00:00"}},
+    {"op_code": "AUTO_COUNTER", "name": "自动计数", "category": "DYNAMIC", "description": "(Current+Step)%Max", "param_template": {"start_val": 0, "step": 1, "max": 65535}},
     
     # LOGIC
     {"op_code": "MAPPING", "name": "枚举映射", "category": "LOGIC", "description": "状态位映射", "param_template": {"options": "kv_pair_list"}},

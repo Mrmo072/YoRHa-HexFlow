@@ -185,7 +185,7 @@ export default function BlockPropertiesPanel({
                     {/* Instruction Actions */}
                     <div className="pt-8 flex flex-col gap-3 border-t border-nier-light/20">
                         {hasUnsavedChanges && (
-                            <button onClick={onSaveInstruction} className="w-full bg-nier-light/10 border border-nier-light text-white hover:bg-nier-light hover:text-black py-2 px-4 uppercase text-xs tracking-widest transition-colors font-bold">
+                            <button onClick={onSaveInstruction} className="w-full bg-nier-light/10 border border-nier-light text-nier-light hover:bg-nier-light hover:text-black py-2 px-4 uppercase text-xs tracking-widest transition-colors font-bold">
                                 保存更改 (SAVE)
                             </button>
                         )}
@@ -292,11 +292,11 @@ export default function BlockPropertiesPanel({
                             <select
                                 value={tempBlockConfig.repeat_type || 'NONE'}
                                 onChange={e => handleTempUpdate({ repeat_type: e.target.value })}
-                                className="w-full bg-black border border-white/30 text-xs p-1"
+                                className="w-full bg-nier-dark border border-nier-light/50 text-nier-light text-xs p-1 focus:outline-none"
                             >
-                                <option value="NONE">无重复 (Single)</option>
-                                <option value="FIXED">固定次数 (Fixed)</option>
-                                <option value="DYNAMIC">动态引用 (Dynamic Ref)</option>
+                                <option value="NONE" className="bg-nier-dark text-nier-light">无重复 (Single)</option>
+                                <option value="FIXED" className="bg-nier-dark text-nier-light">固定次数 (Fixed)</option>
+                                <option value="DYNAMIC" className="bg-nier-dark text-nier-light">动态引用 (Dynamic Ref)</option>
                             </select>
 
                             {tempBlockConfig.repeat_type === 'FIXED' && (
@@ -311,11 +311,11 @@ export default function BlockPropertiesPanel({
                                     <select
                                         value={tempBlockConfig.repeat_ref_id || ''}
                                         onChange={e => handleTempUpdate({ repeat_ref_id: e.target.value })}
-                                        className="bg-black border border-white/30 text-xs p-1"
+                                        className="w-full bg-nier-dark border border-nier-light/50 text-nier-light text-xs p-1 focus:outline-none"
                                     >
-                                        <option value="">-- SELECT REF --</option>
+                                        <option value="" className="bg-nier-dark text-nier-light">-- SELECT REF --</option>
                                         {currentInstruction.fields.filter(b => b.id !== selectedBlock.id).map(b => (
-                                            <option key={b.id} value={b.id}>{b.name} ({b.sequence})</option>
+                                            <option key={b.id} value={b.id} className="bg-nier-dark text-nier-light">{b.name} ({b.sequence})</option>
                                         ))}
                                     </select>
                                 </div>

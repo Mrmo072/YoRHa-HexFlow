@@ -67,17 +67,13 @@ export default function Instruction({ onWebUpdate }) {
         return uiLanes.map(lane => ({
             ...lane,
             items: lane.items.map(f => {
+                // 1. Length Calculation
                 if (f.op_code === 'LENGTH_CALC') {
                     const formula = f.parameter_config?.formula;
                     try {
-                        // Check if formula involves any "unknown" variables
-                        // Simple check: if any referenced field maps to "??"
                         const involvedVars = formula.match(/\[([^\]]+)\]/g)?.map(m => m.slice(1, -1)) || [];
                         const hasUnknown = involvedVars.some(v => nameToValueMap[v] === "??");
-
-                        if (hasUnknown) {
-                            return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
-                        }
+                        if (hasUnknown) return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
 
                         const result = evaluateFormula(formula, nameToValueMap);
                         const hex = formatToHex(result, f.byte_len || 1);
@@ -85,6 +81,22 @@ export default function Instruction({ onWebUpdate }) {
                     } catch (e) {
                         return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
                     }
+                }
+                // 2. Time Accumulation (Preview: current - base)
+                if (f.op_code === 'TIME_ACCUMULATOR') {
+                    const baseStr = f.parameter_config?.base_time;
+                    if (!baseStr) return f;
+                    const baseDate = new Date(baseStr);
+                    const now = new Date();
+                    const diffSec = Math.floor((now.getTime() - baseDate.getTime()) / 1000);
+                    const hex = formatToHex(diffSec, f.byte_len || 4); // Default to 4B for time
+                    return { ...f, parameter_config: { ...f.parameter_config, computedValue: hex } };
+                }
+                // 3. Auto Counter (Preview: shows start_val)
+                if (f.op_code === 'AUTO_COUNTER') {
+                    const startVal = f.parameter_config?.start_val || 0;
+                    const hex = formatToHex(startVal, f.byte_len || 1);
+                    return { ...f, parameter_config: { ...f.parameter_config, computedValue: hex } };
                 }
                 // Handle Dynamic Group Sizing Display
                 if (f.op_code === 'ARRAY_GROUP') {
@@ -167,10 +179,43 @@ export default function Instruction({ onWebUpdate }) {
     };
 
     // Reset Group Path when switching instructions
+    // Reset Group Path when switching instructions & Default Expand All
     useEffect(() => {
-        setActiveGroupPath([null]);
+        if (!activeInstructionId) {
+            setActiveGroupPath([null]);
+            return;
+        }
+
+        const inst = instructions.find(i => i.id === activeInstructionId);
+        if (!inst || !inst.fields) {
+            setActiveGroupPath([null]);
+            setSelectedId(null);
+            return;
+        }
+
+        // Greedy Expansion: Recursively find the first GROUP in each layer
+        const newPath = [null];
+        let currentParent = null;
+        let safeCounter = 0;
+
+        while (safeCounter < 10) { // Limit depth to avoid infinite loop
+            safeCounter++;
+            const children = inst.fields
+                .filter(f => (f.parent_id || null) === currentParent)
+                .sort((a, b) => a.sequence - b.sequence);
+
+            const firstGroup = children.find(f => f.op_code === 'ARRAY_GROUP');
+            if (firstGroup) {
+                newPath.push(firstGroup.id);
+                currentParent = firstGroup.id;
+            } else {
+                break;
+            }
+        }
+
+        setActiveGroupPath(newPath);
         setSelectedId(null);
-    }, [activeInstructionId]);
+    }, [activeInstructionId, instructions]);
 
     const loadInstructions = async (search = '') => {
         setIsLoading(true);
@@ -302,27 +347,41 @@ export default function Instruction({ onWebUpdate }) {
         const siblings = currentInstruction.fields.filter(f => (f.parent_id || null) === currentParentId);
         const nextSeq = siblings.length > 0 ? Math.max(...siblings.map(s => s.sequence)) + 1 : 0;
 
+        // Initialize Parameters from Template
+        const defaultParams = {};
+        if (template.param_template) {
+            const keywords = ['datetime', 'number', 'string', 'field_picker', 'kv_pair_list', 'input'];
+            Object.entries(template.param_template).forEach(([key, val]) => {
+                // If the value is NOT a type keyword, treat it as a default value
+                if (typeof val !== 'string' || !keywords.includes(val)) {
+                    defaultParams[key] = val;
+                }
+            });
+        }
+
         const newBlock = {
             id: uuidv4(),
             parent_id: currentParentId, // Set hierarchically
             sequence: nextSeq,
             op_code: opCode,
             name: getUniqueName(template?.name || opCode),
-            byte_len: 1,
-            parameter_config: {},
-            children: [],
-            repeat_type: 'NONE', repeat_count: 1
+            parameter_config: defaultParams,
+            children: [], // Ensure children is an empty array by default
+            repeat_type: template.repeat_type || 'NONE', // Default from template or 'NONE'
+            repeat_count: template.repeat_count || 1, // Default from template or 1
+            byte_len: template.byte_len || 1, // Default from template or 1
         };
 
-        if (opCode === 'HEX_RAW') newBlock.parameter_config = { hex: "00" };
+        // UI-Only Overrides (if not already set by template defaults)
+        if (opCode === 'HEX_RAW' && !newBlock.parameter_config.hex) newBlock.parameter_config.hex = "00";
         if (opCode === 'ARRAY_GROUP') {
             newBlock.byte_len = 0; // Dynamic
-            newBlock.parameter_config = { max_count: 1 };
+            if (!newBlock.parameter_config.max_count) newBlock.parameter_config.max_count = 1;
         }
         if (template?.param_template?.bits) {
             const defaultBits = Array.isArray(template.param_template.bits) ? template.param_template.bits[0] : 8;
-            newBlock.parameter_config = { bits: defaultBits };
-            newBlock.byte_len = Math.ceil(defaultBits / 8);
+            if (!newBlock.parameter_config.bits) newBlock.parameter_config.bits = defaultBits;
+            newBlock.byte_len = Math.ceil(newBlock.parameter_config.bits / 8);
         }
 
         // Add to flat list
@@ -409,10 +468,13 @@ export default function Instruction({ onWebUpdate }) {
 
     const handleSelectInstruction = (id) => {
         if (hasUnsavedChanges && activeInstructionId !== id) {
-            openConfirm("Discard unsaved changes?", () => {
-                setActiveInstructionId(id);
-                setSelectedId(null);
-                setHasUnsavedChanges(false);
+            openConfirm("放弃未保存的更改？", () => {
+                // To discard, we must reload the original state from backend
+                loadInstructions().then(() => {
+                    setActiveInstructionId(id);
+                    setSelectedId(null);
+                    setHasUnsavedChanges(false);
+                });
             });
             return;
         }
@@ -481,13 +543,13 @@ export default function Instruction({ onWebUpdate }) {
                 onClick={handleCanvasClick}
             >
                 <div className="h-10 border-b border-nier-light bg-nier-dark/90 flex items-center justify-between px-4 gap-2 text-xs font-mono opacity-50">
-                    <div className="flex items-center gap-2 cursor-pointer hover:text-white" onClick={() => setSelectedId(null)}>
+                    <div className="flex items-center gap-2 cursor-pointer hover:text-nier-light" onClick={() => setSelectedId(null)}>
                         <span>KERNEL EDITOR // {currentInstruction?.device_code} / {currentInstruction?.code}</span>
                     </div>
                     <div className="flex gap-2">
                         {hasUnsavedChanges && <span className="text-yellow-500 animate-pulse">UNSAVED</span>}
                         {hasUnsavedChanges && (
-                            <button onClick={handleRevertChanges} className="hover:text-white hover:underline">RESET</button>
+                            <button onClick={handleRevertChanges} className="hover:text-nier-light hover:underline">RESET</button>
                         )}
                     </div>
                 </div>

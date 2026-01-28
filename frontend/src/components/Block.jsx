@@ -46,7 +46,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
     };
 
     const getClasses = () => {
-        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative z-10 transition-all duration-200 ";
+        let base = "min-h-[6rem] h-auto border flex flex-col justify-between p-2 select-none group relative z-10 transition-colors duration-200 ";
 
         // PICKING MODE VISUALS (Always distinct)
         if (isPickMode) {
@@ -73,7 +73,7 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
             }
         }
 
-        if (isDragging) base += " opacity-50 z-50 ring-2 ring-white scale-105";
+        if (isDragging) base += " opacity-5 z-50 ring-2 ring-white scale-105";
 
         return base;
     };

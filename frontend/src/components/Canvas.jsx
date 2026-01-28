@@ -27,7 +27,7 @@ function LaneContainer({ lane, index, children, isActiveLane, onNavigateGroup })
     return (
         <div
             ref={setNodeRef}
-            className={`relative flex gap-1 items-end min-w-max p-4 border border-dashed min-h-[140px] transition-all duration-300
+            className={`relative flex gap-1 items-end min-w-max p-4 border border-dashed min-h-[140px] transition-colors duration-300
                 ${isActiveLane ? 'border-nier-light/40 bg-nier-light/5 opacity-100 grayscale-0 scale-[1.01]' : 'border-nier-light/10 bg-transparent opacity-80 grayscale scale-100'}
             `}
         >
@@ -134,71 +134,129 @@ export default function Canvas({
         return () => clearTimeout(timer);
     }, [lanes, selectedId, pickingMode, activeGroupPath, activeDragId]); // Re-calc on drag mainly for stability, visuals handled by CSS
 
+    // Local state for DnD visual updates (for cross-lane previews)
+    const [localLanes, setLocalLanes] = useState(lanes);
+
+    // Sync prop -> local
+    useEffect(() => {
+        setLocalLanes(lanes);
+    }, [lanes]);
+
     const handleDragStart = (event) => {
         setActiveDragId(event.active.id);
     }
 
     const handleDragOver = (event) => {
-        const { over } = event;
+        const { active, over } = event;
         if (!over) {
             setDragOverLaneIndex(null);
             return;
         }
 
-        // Determine which lane we are hovering
-        let laneIndex = null;
+        // 1. Identify Lanes
+        const activeContainerId = active.data.current?.sortable?.containerId || Object.keys(localLanes).find(key => localLanes[key].items.find(i => i.id === active.id));
+        const overContainerId = over.data.current?.sortable?.containerId || over.id;
 
-        // Case A: Hovering over a Lane Container
-        if (over.id.toString().startsWith('lane-container-')) {
-            laneIndex = parseInt(over.id.split('-')[2]);
-        }
-        // Case B: Hovering over an item within a lane
-        else {
-            const lane = lanes.find(l => l.items.find(i => i.id === over.id));
-            if (lane) {
-                const idx = lanes.indexOf(lane);
-                laneIndex = idx;
+        // Find Lane Objects using localLanes
+        // Helper: Find lane containing item or matching container ID
+        const findLane = (id) => {
+            // If id is "lane-context-X"
+            if (String(id).startsWith('lane-context-')) {
+                const depth = parseInt(id.split('-')[2]);
+                return localLanes.find(l => l.depth === depth);
             }
+            // If id is item ID
+            return localLanes.find(l => l.items.find(i => i.id === id));
+        };
+
+        const sourceLane = findLane(active.id);
+        const targetLane = findLane(over.id);
+
+        if (!sourceLane || !targetLane) return;
+
+        // Update Focus Index
+        let newLaneIndex = null;
+        if (over.id.toString().startsWith('lane-container-')) {
+            newLaneIndex = parseInt(over.id.split('-')[2]);
+        } else if (targetLane) {
+            newLaneIndex = localLanes.indexOf(targetLane);
+        }
+        if (newLaneIndex !== null) setDragOverLaneIndex(newLaneIndex);
+
+        // --- SAME-LANE MOVE ---
+        if (sourceLane === targetLane) {
+            const oldIndex = sourceLane.items.findIndex(i => i.id === active.id);
+            let newIndex = sourceLane.items.findIndex(i => i.id === over.id);
+
+            // If hovering over the container (trailing space), move to end
+            if (over.id.toString().startsWith('lane-container-')) {
+                newIndex = sourceLane.items.length - 1;
+            }
+
+            if (oldIndex !== newIndex && newIndex !== -1) {
+                setLocalLanes(prev => {
+                    const newLanes = [...prev];
+                    const laneIdx = prev.indexOf(sourceLane);
+                    if (laneIdx === -1) return prev;
+                    newLanes[laneIdx] = {
+                        ...sourceLane,
+                        items: arrayMove(sourceLane.items, oldIndex, newIndex)
+                    };
+                    return newLanes;
+                });
+            }
+            return;
         }
 
-        if (laneIndex !== null) {
-            setDragOverLaneIndex(laneIndex);
-        }
+        // --- CROSS-LANE MOVE ---
+        setLocalLanes(prev => {
+            const activeItem = sourceLane.items.find(i => i.id === active.id);
+            if (!activeItem) return prev;
+
+            const newSourceItems = sourceLane.items.filter(i => i.id !== active.id);
+            const newTargetItems = [...targetLane.items];
+
+            const overIndex = over.id.toString().startsWith('lane-container-')
+                ? newTargetItems.length
+                : newTargetItems.findIndex(i => i.id === over.id);
+
+            const finalIndex = overIndex >= 0 ? overIndex : newTargetItems.length;
+
+            // Mutate copies
+            const newLanes = [...prev];
+            const srcIdx = prev.indexOf(sourceLane);
+            const tgtIdx = prev.indexOf(targetLane);
+
+            if (srcIdx === -1 || tgtIdx === -1) return prev;
+
+            newLanes[srcIdx] = { ...sourceLane, items: newSourceItems };
+
+            const movedItem = { ...activeItem, parentId: targetLane.parentId };
+            newTargetItems.splice(finalIndex, 0, movedItem);
+            newLanes[tgtIdx] = { ...targetLane, items: newTargetItems };
+
+            return newLanes;
+        });
     }
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
         setActiveDragId(null);
-        setDragOverLaneIndex(null); // Reset focus
-        if (!over) return;
+        setDragOverLaneIndex(null);
 
-        const sourceLane = lanes.find(l => l.items.find(i => i.id === active.id));
-        if (!sourceLane) return;
-
-        let destLane = null;
-        let newIndex = 0;
-
-        if (over.id.toString().startsWith('lane-container-')) {
-            const laneIndex = parseInt(over.id.split('-')[2]);
-            destLane = lanes[laneIndex];
-            newIndex = destLane.items.length;
-        } else {
-            destLane = lanes.find(l => l.items.find(i => i.id === over.id));
-            if (destLane) {
-                const overItemIndex = destLane.items.findIndex(i => i.id === over.id);
-                newIndex = overItemIndex;
-            }
+        if (!over) {
+            setLocalLanes(lanes); // Revert
+            return;
         }
 
-        if (destLane) {
-            if (sourceLane === destLane) {
-                if (active.id !== over.id) {
-                    onMoveItem(active.id, sourceLane.parentId, newIndex);
-                }
-            } else {
-                onMoveItem(active.id, destLane.parentId, newIndex);
-            }
+        // TRUST VISUALS: Find where the item ended up in localLanes (State Truth)
+        const finalLane = localLanes.find(l => l.items.find(i => i.id === active.id));
+        if (finalLane) {
+            const finalIndex = finalLane.items.findIndex(i => i.id === active.id);
+            onMoveItem(active.id, finalLane.parentId, finalIndex);
         }
+
+        // localLanes will be synced with props via Instruction.jsx -> useEffect
     };
 
     const handleBlockClick = (id, opCode) => {
@@ -247,13 +305,13 @@ export default function Canvas({
                 onDragEnd={handleDragEnd}
             >
                 {/* RENDER LANES */}
-                {lanes.map((lane, index) => {
+                {localLanes.map((lane, index) => {
                     // Logic: 
                     // 1. If dragging, Focus = dragOverLaneIndex
                     // 2. If not dragging, Focus = last lane (deepest)
                     const isFocus = activeDragId
                         ? (dragOverLaneIndex === index)
-                        : (index === lanes.length - 1);
+                        : (index === localLanes.length - 1);
 
                     const isRoot = index === 0;
 

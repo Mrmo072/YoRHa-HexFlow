@@ -76,7 +76,7 @@ export default function ProtocolOnion({ block, depth = 0 }) {
                         animate={{ top: '110%', opacity: 0.5 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                        className="absolute left-0 w-full h-[2px] bg-white/30 pointer-events-none shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                        className="absolute left-0 w-full h-[2px] bg-nier-light/30 pointer-events-none shadow-[0_0_10px_rgba(218,212,187,0.5)]"
                     />
                 )}
             </AnimatePresence>
@@ -93,7 +93,7 @@ export default function ProtocolOnion({ block, depth = 0 }) {
             <div className="mt-4 flex flex-col gap-4">
                 {!isContainer ? (
                     // Atomic Block View
-                    <div className="font-mono text-sm text-nier-light bg-black/30 p-3 border border-nier-light/10 flex items-center justify-between group-hover:bg-nier-light/5 transition-colors">
+                    <div className="font-mono text-sm text-nier-light bg-nier-highlight/10 p-3 border border-nier-light/10 flex items-center justify-between group-hover:bg-nier-light/5 transition-colors">
                         <span className="opacity-50 text-[10px]">RAW</span>
                         <span className="font-bold tracking-widest">{block.hex_value || (block.byte_length && "00 ".repeat(block.byte_length))}</span>
                     </div>

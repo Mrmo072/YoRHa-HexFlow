@@ -4,7 +4,7 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-nier-dark/40 backdrop-blur-[2px] animate-in fade-in duration-200">
             <div className="w-[400px] border-2 border-nier-light bg-nier-dark relative shadow-[0_0_20px_rgba(218,212,187,0.2)]">
                 {/* Decorative Corners */}
                 <div className="absolute -top-1 -left-1 w-2 h-2 bg-nier-light"></div>
@@ -21,14 +21,14 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
                 </div>
 
                 {/* Content */}
-                <div className="p-8 text-center">
-                    <div className="text-white text-sm font-mono tracking-wide leading-relaxed whitespace-pre-wrap">
+                <div className="p-8 text-center text-nier-light">
+                    <div className="text-sm font-mono tracking-wide leading-relaxed whitespace-pre-wrap">
                         {message}
                     </div>
                 </div>
 
                 {/* Footer / Actions */}
-                <div className="p-4 border-t border-nier-light/30 bg-black/20 flex gap-4 justify-center">
+                <div className="p-4 border-t border-nier-light/30 bg-nier-light/5 flex gap-4 justify-center">
                     {onCancel && (
                         <button
                             onClick={onCancel}
@@ -39,7 +39,7 @@ export default function NieRModal({ isOpen, message, onConfirm, onCancel, type =
                     )}
                     <button
                         onClick={onConfirm}
-                        className="px-6 py-2 bg-nier-light text-nier-dark font-bold hover:bg-white hover:scale-105 text-xs tracking-widest transition-all shadow-[0_0_10px_rgba(218,212,187,0.5)]"
+                        className="px-6 py-2 bg-nier-light text-nier-dark font-bold hover:bg-nier-highlight hover:text-white hover:scale-105 text-xs tracking-widest transition-all shadow-[0_0_10px_rgba(218,212,187,0.5)]"
                     >
                         确认 (CONFIRM)
                     </button>

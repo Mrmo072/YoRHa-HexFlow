@@ -35,8 +35,25 @@ export default function ParamConfigForm({
         }
     }, [blockState.id, blockState.parameter_config?.formula]);
 
-    return Object.entries(template.param_template).map(([key, configType]) => {
+    return Object.entries(template.param_template).map(([key, rawConfig]) => {
         const val = blockState.parameter_config?.[key];
+
+        // TYPE INFERENCE:
+        // 1. If it's a known keyword, use it as type
+        // 2. If it matches a pattern (e.g. ISO date), infer type
+        // 3. Otherwise infer from typeof value
+        const keywords = ['datetime', 'number', 'string', 'field_picker', 'kv_pair_list', 'input'];
+        let configType = rawConfig;
+
+        if (typeof rawConfig === 'string') {
+            if (!keywords.includes(rawConfig)) {
+                // If it looks like a date, it's a datetime
+                if (rawConfig.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) configType = 'datetime';
+                else configType = 'string';
+            }
+        } else if (typeof rawConfig === 'number') {
+            configType = 'number';
+        }
 
         // 0. Field Picker (Logic Fields)
         if (configType === 'field_picker') {
@@ -114,12 +131,12 @@ export default function ParamConfigForm({
                     </div>
                     {/* Multi-Format Toggle */}
                     <div className="flex justify-end mb-2">
-                        <div className="flex text-[9px] gap-1 border border-nier-light/30 p-0.5 bg-black">
+                        <div className="flex text-[9px] gap-1 border border-nier-light/30 p-0.5 bg-nier-highlight/10">
                             {['HEX', 'DEC', 'BIN'].map(m => (
                                 <button
                                     key={m}
                                     onClick={() => setHexInputMode(m)}
-                                    className={`px-2 py-0.5 transition-all ${hexInputMode === m ? 'bg-nier-light text-black font-bold' : 'text-nier-light hover:bg-nier-light/20'}`}
+                                    className={`px-2 py-0.5 transition-all ${hexInputMode === m ? 'bg-nier-light text-nier-dark font-bold' : 'text-nier-light hover:bg-nier-light/20'}`}
                                 >
                                     {m}
                                 </button>

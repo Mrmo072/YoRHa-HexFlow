@@ -10,7 +10,7 @@ const InputBox = ({ label, value, min, max, onChange, width = "w-16" }) => (
             max={max}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className={`${width} bg-transparent border-b-2 border-nier-light/30 text-center font-mono text-xl text-nier-light focus:border-nier-light focus:bg-white/5 focus:outline-none transition-all py-1`}
+            className={`${width} bg-transparent border-b-2 border-nier-light/30 text-center font-mono text-xl text-nier-light focus:border-nier-light focus:bg-nier-light/5 focus:outline-none transition-all py-1`}
         />
     </div>
 );
@@ -66,7 +66,7 @@ export default function NieRDatePicker({ isOpen, initialValue, onConfirm, onCanc
     };
 
     return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-nier-dark/40 backdrop-blur-[2px] animate-in fade-in duration-200">
             <div className="w-[520px] bg-nier-dark border border-nier-light relative shadow-[0_0_30px_rgba(0,0,0,0.3)] text-nier-fg p-1">
                 {/* Inner Border Frame */}
                 <div className="border border-nier-light/30 p-6 h-full flex flex-col gap-6 relative">
@@ -131,7 +131,7 @@ export default function NieRDatePicker({ isOpen, initialValue, onConfirm, onCanc
                         </button>
                         <button
                             onClick={handleConfirm}
-                            className="px-8 py-2 bg-nier-light text-nier-dark font-bold hover:bg-white hover:scale-105 text-xs tracking-widest transition-all shadow-md"
+                            className="px-8 py-2 bg-nier-light text-nier-dark font-bold hover:bg-nier-highlight hover:text-white hover:scale-105 text-xs tracking-widest transition-all shadow-md"
                         >
                             确认 (CONFIRM)
                         </button>

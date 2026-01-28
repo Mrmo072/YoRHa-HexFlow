@@ -49,13 +49,13 @@ export default function ComponentPalette({ operatorTemplates, onAddBlock }) {
         <aside className="w-24 border-r border-nier-light flex flex-col items-center py-2 gap-2 z-10 bg-nier-dark select-none overflow-y-auto hide-scrollbar">
             {Object.entries(groupedOperators).map(([category, ops]) => (
                 <div key={category} className="w-full flex flex-col items-center mb-2">
-                    <div className="text-[8px] opacity-40 uppercase tracking-widest mb-1 w-full text-center border-b border-white/10">{category}</div>
+                    <div className="text-[8px] opacity-40 uppercase tracking-widest mb-1 w-full text-center border-b border-nier-light/10">{category}</div>
                     <div className="grid grid-cols-1 gap-2 w-full px-2">
                         {ops.map(op => (
                             <button
                                 key={op.op_code}
                                 onClick={() => onAddBlock(op.op_code)}
-                                className="w-full border border-nier-light/30 hover:border-nier-light bg-black/40 hover:bg-white hover:text-black py-2 px-1 text-[9px] leading-tight transition-all text-center flex flex-col items-center gap-1"
+                                className="w-full border border-nier-light/30 hover:border-nier-light bg-nier-dark hover:bg-nier-light hover:text-nier-dark py-2 px-1 text-[9px] leading-tight transition-all text-center flex flex-col items-center gap-1 text-nier-light/80"
                                 title={op.description}
                             >
                                 <span className="font-bold">{op.name}</span>
