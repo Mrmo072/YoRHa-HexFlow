@@ -218,7 +218,8 @@ export default function Instruction({ onWebUpdate }) {
         }
         setFocusedParentId(null);
         setSelectedId(null);
-    }, [activeInstructionId, instructions]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeInstructionId]);
 
     const loadInstructions = async (search = '') => {
         setIsLoading(true);
