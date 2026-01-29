@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 're
 import { v4 as uuidv4 } from 'uuid';
 import Protocol from './pages/Protocol';
 import Instruction from './pages/Instruction';
+import InstructionProcessor from './pages/InstructionProcessor';
 import Orchestration from './pages/Orchestration';
 import Terminal from './pages/Terminal';
 import DataHub from './pages/DataHub';
@@ -78,6 +79,7 @@ function Layout() {
                 <div className="flex-1 flex flex-col py-6 gap-2">
                     <NavItem to="/protocol" label="协议定义" shortcut="A" />
                     <NavItem to="/instruction" label="指令管理" shortcut="B" />
+                    <NavItem to="/processing" label="指令加工" shortcut="R" />
                     <NavItem to="/orchestration" label="编排绑定" shortcut="C" />
                     <NavItem to="/terminal" label="通讯调试" shortcut="D" />
                     <NavItem to="/datahub" label="数据中心" shortcut="E" />
@@ -118,6 +120,7 @@ function Layout() {
                         <Route path="/" element={<Navigate to="/protocol" replace />} />
                         <Route path="/protocol" element={<Protocol protocols={protocols} setProtocols={setProtocols} />} />
                         <Route path="/instruction" element={<Instruction instructions={instructions} setInstructions={setInstructions} />} />
+                        <Route path="/processing" element={<InstructionProcessor />} />
                         <Route path="/orchestration" element={<Orchestration protocols={protocols} instructions={instructions} />} />
                         <Route path="/terminal" element={<Terminal />} />
                         <Route path="/datahub" element={<DataHub />} />
