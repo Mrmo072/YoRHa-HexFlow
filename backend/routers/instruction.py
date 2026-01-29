@@ -49,10 +49,8 @@ def get_instructions(search: str = None, db: Session = Depends(get_db)):
     if search:
         query = query.filter(or_(Instruction.name.contains(search), Instruction.code.contains(search)))
     instructions = query.all()
-    # Filter for Roots only to ensure Tree Structure
+    # Sort fields by sequence
     for i in instructions:
-        i.fields = [f for f in i.fields if f.parent_id is None]
-        # Sort roots by sequence
         i.fields.sort(key=lambda x: x.sequence)
     return instructions
 
@@ -62,18 +60,10 @@ def get_instruction_detail(id: str, db: Session = Depends(get_db)):
     if not inst:
         raise HTTPException(status_code=404, detail="Instruction not found")
     
-    roots = [f for f in inst.fields if f.parent_id is None]
+    # Sort flat list by sequence for consistency
+    inst.fields.sort(key=lambda x: x.sequence)
     
-    # Sort
-    def sort_tree(nodes):
-        nodes.sort(key=lambda x: x.sequence)
-        for n in nodes:
-            if n.children:
-                sort_tree(n.children)
-    sort_tree(roots)
-    
-    # IMPORTANT: Overwrite fields with roots to prevent flat-list duplication in Pydantic response
-    inst.fields = roots
+    return inst
     
     return inst
 
