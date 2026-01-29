@@ -15,7 +15,8 @@ export const SmartInput = ({
     highlight = false,
     autoFocus = false,
     suffix = null,
-    className = ""
+    className = "",
+    placeholder = ""
 }) => {
     // Local buffer to allow unnatural typing (e.g. "05", "0x", or ".") without immediate state correction
     const [localValue, setLocalValue] = useState(String(value ?? ''));
@@ -72,15 +73,16 @@ export const SmartInput = ({
     // Compact HUD aesthetics - NieR: Automata standard (High-Density)
     const baseClasses = "bg-[#d1cbaf]/5 font-mono outline-none text-left px-3 py-1.5 text-base font-bold tracking-wider transition-all duration-200 uppercase w-full";
     const editClasses = "text-[#4a4a4a] border-2 border-[#4a4a4a]/10 focus:border-[#4a4a4a] focus:bg-[#d1cbaf]/20 hover:border-[#4a4a4a]/20";
-    const readClasses = "text-[#4a4a4a]/40 cursor-not-allowed border-2 border-dashed border-[#4a4a4a]/5 bg-transparent";
+    // Modified: Solid block style for read-only (Fixed) fields
+    const readClasses = "text-[#4a4a4a] bg-[#4a4a4a]/5 border-2 border-[#4a4a4a]/20 cursor-default";
 
     return (
         <div className={`flex flex-col gap-1 py-1 ${highlight ? 'animate-pulse' : ''} group w-full ${className}`}>
             <div className="flex items-stretch relative">
                 {label && (
                     <div className="flex items-center gap-2 mr-3 min-w-[140px] shrink-0">
-                        <div className={`w-1 h-4 ${readOnly ? 'bg-[#4a4a4a]/20' : 'bg-[#4a4a4a]/80'}`}></div>
-                        <span className={`text-[11px] font-black uppercase tracking-widest truncate ${readOnly ? 'text-[#4a4a4a]/40' : 'text-[#4a4a4a]/70'}`}>
+                        <div className={`w-1 h-4 ${readOnly ? 'bg-[#4a4a4a]/40' : 'bg-[#4a4a4a]/80'}`}></div>
+                        <span className={`text-[11px] font-black uppercase tracking-widest truncate ${readOnly ? 'text-[#4a4a4a]/60' : 'text-[#4a4a4a]/70'}`}>
                             {label}
                         </span>
                     </div>
@@ -104,7 +106,7 @@ export const SmartInput = ({
                     ) : (
                         <input
                             type="text"
-                            className={`${baseClasses} ${readOnly ? readClasses : editClasses} flex-1 min-w-0`}
+                            className={`${baseClasses} ${readOnly ? readClasses : editClasses} flex-1 min-w-0 placeholder:text-[#4a4a4a]/20`}
                             value={localValue}
                             onChange={handleChange}
                             onFocus={handleFocus}
@@ -113,6 +115,7 @@ export const SmartInput = ({
                             autoFocus={autoFocus}
                             spellCheck={false}
                             autoComplete="off"
+                            placeholder={placeholder}
                         />
                     )}
 

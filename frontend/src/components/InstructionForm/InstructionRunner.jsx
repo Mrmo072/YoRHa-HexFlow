@@ -28,8 +28,6 @@ export default function InstructionRunner({ instruction, onSend }) {
             }
 
             // Respect field ordering if provided (Backend uses 'sequence')
-            // Note: sort needs to be recursive if we built a tree, or we sort the flat list first?
-            // If we built tree above, we need to sort each level.
             const sortNodes = (nodes) => {
                 nodes.sort((a, b) => (a.sequence ?? a.order ?? 0) - (b.sequence ?? b.order ?? 0));
                 nodes.forEach(n => {
@@ -49,18 +47,21 @@ export default function InstructionRunner({ instruction, onSend }) {
                         // Inherit or process
                         const op = String(f.op_code || '').toUpperCase();
                         const type = String(f.type || f.parameter_config?.type || '').toLowerCase();
-                        // ... (rest of logic mostly same, but using processedChildren)
+
                         // Advanced Recognition: Length/Calculated
                         const isCalculated = op === 'CALCULATED' || type === 'length' || type === 'calculated';
 
-                        // Advanced Recognition: Inputs (anything that is NOT calculated and NOT explicitly fixed/raw)
-                        const isFixed = op === 'FIXED' || op === 'HEX_RAW' || type === 'fixed' || type === 'hex_raw' || f.parameter_config?.readOnly;
+                        // Advanced Recognition: Inputs
+                        // FIX: Broaden Fixed detection. "Raw HEX" might be 'HEX' or just have a value.
+                        const hasFixedValue = (f.parameter_config?.hex || f.parameter_config?.value) !== undefined && !f.parameter_config?.variable;
+                        const isFixed = op === 'FIXED' || op === 'HEX_RAW' || op === 'HEX' || type === 'fixed' || type === 'hex_raw' || f.parameter_config?.readOnly || hasFixedValue;
                         const isInput = !isCalculated && !isFixed;
 
                         return {
                             id: f.id,
                             name: f.name || f.label,
                             op_code: isInput ? 'INPUT' : (isCalculated ? 'CALCULATED' : 'FIXED'),
+                            original_op_code: f.op_code, // Preserve original for render logic fallback
                             parameter_config: {
                                 hex: f.hex_value, // Legacy mapping support if needed, mostly in param_config now
                                 ...f.parameter_config,
@@ -137,9 +138,124 @@ export default function InstructionRunner({ instruction, onSend }) {
     const instructionCode = normalizedInstruction.code || normalizedInstruction.id;
     const instructionName = normalizedInstruction.name || normalizedInstruction.label || 'Unnamed Protocol';
 
+
+    const renderFields = (fieldsToRender, depth = 0) => {
+        return fieldsToRender.map((field) => {
+            const params = field.parameter_config || {};
+            const isCalculated = field.op_code === 'CALCULATED' || params.formula === 'auto';
+
+            // FIX: Robust check using preserved original_op_code
+            const originalOp = String(field.original_op_code || '').toUpperCase();
+            const isFixed = field.op_code === 'FIXED' || originalOp === 'HEX_RAW' || originalOp === 'FIXED' || field.op_code === 'HEX_RAW' || params.readOnly;
+
+            const isEditable = !isCalculated && !isFixed;
+            const rawOptions = params.options;
+            const hasOptions = rawOptions && (Array.isArray(rawOptions) ? rawOptions.length > 0 : Object.keys(rawOptions).length > 0);
+            const isEnum = hasOptions || field.op_code === 'MAPPING';
+
+            const subFields = field.fields || [];
+
+            if (subFields.length > 0) {
+                return (
+                    <div key={field.id} className={`${depth > 0 ? 'ml-6' : ''}`}>
+                        <div className="border-l border-nier-light/10 pl-4 py-2 my-2 bg-nier-light/[0.02]">
+                            <div className="flex items-center gap-2 mb-2 opacity-60">
+                                <div className="w-2 h-2 bg-nier-light/30"></div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-nier-light">
+                                    {field.name || field.label || 'BLOCK'}
+                                </span>
+                            </div>
+                            {renderFields(subFields, depth + 1)}
+                        </div>
+                    </div>
+                );
+            }
+
+            // LEAF NODE
+            const formattedOptions = Array.isArray(rawOptions)
+                ? rawOptions.map(opt => typeof opt === 'object' ? opt : { label: String(opt), value: opt })
+                : (rawOptions ? Object.entries(rawOptions).map(([k, v]) => ({ label: k, value: v })) : []);
+
+            let displayValue = '';
+            let placeholder = '';
+            let inputType = !isEditable ? 'text' : (isEnum && formattedOptions.length > 0 ? 'select' : (params.type || 'number'));
+
+            // 1. Fixed / ReadOnly Fields: Show the exact HEX or Value
+            if (isFixed) {
+                const isExplicitHex = originalOp === 'HEX_RAW' || field.op_code === 'HEX_RAW';
+                let rawVal = params.hex || params.value;
+
+                if (!rawVal && isExplicitHex) {
+                    // Default to Zero based on byte_len if missing
+                    rawVal = '00'.repeat(field.byte_len || 1);
+                }
+
+                displayValue = String(rawVal || '').toUpperCase();
+
+                if (!displayValue) {
+                    placeholder = 'NO DATA';
+                }
+            } else if (isCalculated || isEnum) {
+                displayValue = inputs[field.id] !== undefined ? inputs[field.id] : (computedValues[field.id] || 0);
+            } else {
+                const rawValue = inputs[field.id];
+                if (field.byte_len && field.byte_len > 0) {
+                    const currentVal = rawValue ?? 0;
+                    if (!params.type || params.type === 'number' || params.type === 'hex') {
+                        inputType = 'hex';
+                        if (typeof currentVal === 'number') {
+                            displayValue = currentVal.toString(16).toUpperCase().padStart(field.byte_len * 2, '0');
+                        } else {
+                            displayValue = String(currentVal || '').toUpperCase();
+                        }
+                        placeholder = '0'.repeat(field.byte_len * 2);
+                    } else {
+                        displayValue = rawValue;
+                    }
+                } else {
+                    displayValue = rawValue;
+                    placeholder = '?? [VAR]';
+                }
+            }
+
+            const handleChange = (val) => {
+                if (inputType === 'hex' && typeof val === 'string') {
+                    // Convert hex string back to integer for storage
+                    const num = parseInt(val, 16);
+                    handleInputChange(field.id, isNaN(num) ? 0 : num);
+                } else {
+                    handleInputChange(field.id, val);
+                }
+            };
+
+            return (
+                <div key={field.id} className={`${depth > 0 ? 'ml-6' : ''}`}>
+                    <div className="group/field transition-all border-l-2 border-transparent hover:border-nier-light/10 focus-within:border-nier-light/30">
+                        <SmartInput
+                            label={field.name || field.label || 'PARAM'}
+                            value={displayValue}
+                            onChange={handleChange}
+                            type={inputType}
+                            options={formattedOptions}
+                            readOnly={!isEditable}
+                            highlight={isCalculated}
+                            suffix={params.unit || ''}
+                            placeholder={placeholder}
+                        />
+                        {params.description && (
+                            <div className="text-[9px] font-bold text-nier-light/30 ml-40 -mt-1 mb-2 opacity-0 group-hover/field:opacity-100 transition-opacity uppercase tracking-tighter">
+                                {params.description}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        });
+    };
+
     return (
         <div className="flex-1 flex flex-col h-full bg-nier-bg p-8 gap-8 overflow-hidden">
-            {/* Header: Identity Selection */}
+            {/* Header */}
             <div className="border-b-4 border-nier-light/20 pb-6 flex justify-between items-end">
                 <div>
                     <div className="text-[10px] font-black font-mono text-nier-light/40 mb-2 tracking-[0.3em] uppercase">:: Operational Protocol ::</div>
@@ -158,7 +274,6 @@ export default function InstructionRunner({ instruction, onSend }) {
                 </div>
             </div>
 
-            {/* Main Content: Form + Preview */}
             <div className="flex-1 flex gap-8 overflow-hidden">
                 {/* Left: Dynamic Form */}
                 <div className="flex-[2] overflow-y-auto pr-8 custom-scrollbar">
@@ -170,78 +285,12 @@ export default function InstructionRunner({ instruction, onSend }) {
                         <div className="h-[1px] flex-1 bg-nier-light/10"></div>
                     </div>
                     <div className="space-y-1">
-                        {(() => {
-                            const renderFields = (fieldsToRender, depth = 0) => {
-                                return fieldsToRender.map((field) => {
-                                    const params = field.parameter_config || {};
-                                    // RE-CHECK Editability for ANY field that isn't explicitly fixed or auto-calculated
-                                    const isCalculated = field.op_code === 'CALCULATED' || params.formula === 'auto';
-                                    const isFixed = field.op_code === 'FIXED' || field.op_code === 'HEX_RAW' || params.readOnly;
-                                    const isEditable = !isCalculated && !isFixed;
-                                    const rawOptions = params.options;
-                                    const hasOptions = rawOptions && (Array.isArray(rawOptions) ? rawOptions.length > 0 : Object.keys(rawOptions).length > 0);
-                                    const isEnum = hasOptions || field.op_code === 'MAPPING';
-
-                                    const subFields = field.fields || [];
-                                    const hasSubFields = subFields.length > 0;
-
-                                    if (hasSubFields) {
-                                        // Container / Group Node
-                                        return (
-                                            <div key={field.id} className={`${depth > 0 ? 'ml-6' : ''}`}>
-                                                <div className="border-l border-nier-light/10 pl-4 py-2 my-2 bg-nier-light/[0.02]">
-                                                    <div className="flex items-center gap-2 mb-2 opacity-60">
-                                                        <div className="w-2 h-2 bg-nier-light/30"></div>
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-nier-light">
-                                                            {field.name || field.label || 'BLOCK'}
-                                                        </span>
-                                                    </div>
-                                                    {renderFields(subFields, depth + 1)}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    // Leaf Node Logic
-                                    // Transform object options to array format for SmartInput: [{label, value}]
-                                    const formattedOptions = Array.isArray(rawOptions)
-                                        ? rawOptions.map(opt => typeof opt === 'object' ? opt : { label: String(opt), value: opt })
-                                        : (rawOptions ? Object.entries(rawOptions).map(([k, v]) => ({ label: k, value: v })) : []);
-
-                                    // For fixed HEX fields, use the hex parameter as the display value
-                                    const displayValue = isFixed ? (params.hex || params.value) : (inputs[field.id] !== undefined ? inputs[field.id] : (computedValues[field.id] || 0));
-
-                                    return (
-                                        <div key={field.id} className={`${depth > 0 ? 'ml-6' : ''}`}>
-                                            <div className="group/field transition-all border-l-2 border-transparent hover:border-nier-light/10 focus-within:border-nier-light/30">
-                                                <SmartInput
-                                                    label={field.name || field.label || 'PARAM'}
-                                                    value={displayValue}
-                                                    onChange={(v) => handleInputChange(field.id, v)}
-                                                    type={!isEditable ? 'text' : (isEnum && formattedOptions.length > 0 ? 'select' : (params.type || 'number'))}
-                                                    options={formattedOptions}
-                                                    readOnly={!isEditable}
-                                                    highlight={isCalculated}
-                                                    suffix={params.unit || ''}
-                                                />
-                                                {params.description && (
-                                                    <div className="text-[9px] font-bold text-nier-light/30 ml-40 -mt-1 mb-2 opacity-0 group-hover/field:opacity-100 transition-opacity uppercase tracking-tighter">
-                                                        {params.description}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                });
-                            };
-                            return renderFields(normalizedInstruction.fields);
-                        })()}
+                        {renderFields(normalizedInstruction.fields)}
                     </div>
                 </div>
 
-                {/* Right: Preview & Log */}
+                {/* Right: Preview */}
                 <div className="w-1/3 flex flex-col gap-6 border-l-2 border-nier-light/5 pl-8">
-                    {/* Hex Monitor: High Contrast Terminal Style */}
                     <div className="bg-[#4a4a4a] text-[#dad4bb] p-6 relative shadow-inner">
                         <div className="absolute top-0 right-0 bg-[#5c5c5c] text-[9px] px-2 py-0.5 font-bold tracking-widest">
                             BYTE_STREAM_OUTPUT
@@ -251,7 +300,6 @@ export default function InstructionRunner({ instruction, onSend }) {
                         </div>
                     </div>
 
-                    {/* Action */}
                     <button
                         onClick={handleSend}
                         className="bg-nier-light text-white py-4 px-8 font-black text-sm tracking-[0.2em] hover:bg-[#2a2a2a] transition-all active:scale-95 flex items-center justify-between group shadow-lg"
@@ -263,7 +311,6 @@ export default function InstructionRunner({ instruction, onSend }) {
                         </div>
                     </button>
 
-                    {/* Log */}
                     <div className="flex-1 overflow-hidden flex flex-col mt-4">
                         <div className="text-xs font-black text-nier-light/40 mb-3 uppercase tracking-[0.2em] border-b-2 border-nier-light/10 pb-2">
                             :: Transmission_Log ::

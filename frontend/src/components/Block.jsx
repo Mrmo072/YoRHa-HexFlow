@@ -93,7 +93,8 @@ export default function Block({ id, label, name, byte_length, byte_len, type, op
         }
 
         // 2. If it's a HEX block with manual value
-        if (type === 'hex' && effectiveHex) {
+        // FIX: Also check OP_CODE because 'type' might not be 'hex' for raw blocks
+        if ((type === 'hex' || op_code === 'HEX_RAW') && effectiveHex) {
             // Format "AA55" to "AA 55"
             return effectiveHex.replace(/\s/g, '').match(/.{1,2}/g)?.join(' ').toUpperCase() || effectiveHex;
         }
