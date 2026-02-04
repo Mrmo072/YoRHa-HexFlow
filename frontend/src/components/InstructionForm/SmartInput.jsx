@@ -16,7 +16,8 @@ export const SmartInput = ({
     autoFocus = false,
     suffix = null,
     className = "",
-    placeholder = ""
+    placeholder = "",
+    onClick = null
 }) => {
     // Local buffer to allow unnatural typing (e.g. "05", "0x", or ".") without immediate state correction
     const [localValue, setLocalValue] = useState(String(value ?? ''));
@@ -77,7 +78,15 @@ export const SmartInput = ({
     const readClasses = "text-[#4a4a4a] bg-[#4a4a4a]/5 border-2 border-[#4a4a4a]/20 cursor-default";
 
     return (
-        <div className={`flex flex-col gap-1 py-1 ${highlight ? 'animate-pulse' : ''} group w-full ${className}`}>
+        <div
+            className={`flex flex-col gap-1 py-1 ${highlight ? 'animate-pulse' : ''} group w-full ${className} ${onClick ? 'cursor-pointer hover:bg-nier-light/5' : ''}`}
+            onClick={(e) => {
+                if (onClick) {
+                    e.stopPropagation();
+                    onClick();
+                }
+            }}
+        >
             <div className="flex items-stretch relative">
                 {label && (
                     <div className="flex items-center gap-2 mr-3 min-w-[140px] shrink-0">
@@ -106,7 +115,7 @@ export const SmartInput = ({
                     ) : (
                         <input
                             type="text"
-                            className={`${baseClasses} ${readOnly ? readClasses : editClasses} flex-1 min-w-0 placeholder:text-[#4a4a4a]/20`}
+                            className={`${baseClasses} ${readOnly ? readClasses : editClasses} flex-1 min-w-0 placeholder:text-[#4a4a4a]/20 ${onClick ? 'pointer-events-none' : ''}`}
                             value={localValue}
                             onChange={handleChange}
                             onFocus={handleFocus}

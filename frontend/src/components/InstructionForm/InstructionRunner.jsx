@@ -3,7 +3,7 @@ import { useInstructionForm } from '../../hooks/useInstructionForm';
 import { SmartInput } from './SmartInput';
 import { v4 as uuidv4 } from 'uuid';
 
-export default function InstructionRunner({ instruction, onSend }) {
+export default function InstructionRunner({ instruction, onSend, onOpenDatePicker }) {
     // 1. Normalize Instruction Object (Schema Mapping)
     const normalizedInstruction = React.useMemo(() => {
         if (!instruction) return null;
@@ -61,7 +61,7 @@ export default function InstructionRunner({ instruction, onSend }) {
                         return {
                             id: f.id,
                             name: f.name || f.label,
-                            op_code: isInput ? 'INPUT' : (['LENGTH_CALC', 'CHECKSUM_CRC', 'HEX_RAW'].includes(op) ? op : (isCalculated ? 'CALCULATED' : 'FIXED')),
+                            op_code: (['LENGTH_CALC', 'CHECKSUM_CRC', 'HEX_RAW', 'TIME_CUMULATIVE', 'TIME_ACCUMULATOR'].includes(op) || type === 'time_cumulative') ? (['LENGTH_CALC', 'CHECKSUM_CRC', 'HEX_RAW'].includes(op) ? op : 'TIME_CUMULATIVE') : (isInput ? 'INPUT' : (isCalculated ? 'CALCULATED' : 'FIXED')),
                             original_op_code: f.op_code, // Preserve original for render logic fallback
                             parameter_config: {
                                 hex: f.hex_value, // Legacy mapping support if needed, mostly in param_config now
@@ -147,8 +147,11 @@ export default function InstructionRunner({ instruction, onSend }) {
             const originalOp = String(field.original_op_code || '').toUpperCase();
 
             // Re-apply robust classification logic in render time
+            // Re-apply robust classification logic in render time
             const isCalculated = field.op_code === 'CALCULATED' || field.op_code === 'LENGTH_CALC' || field.op_code === 'CHECKSUM_CRC' || params.formula === 'auto' || params.type === 'length' || params.type === 'checksum';
-            const isFixed = field.op_code === 'FIXED' || originalOp === 'HEX_RAW' || originalOp === 'FIXED' || field.op_code === 'HEX_RAW' || params.readOnly;
+            const isTimeCumulative = field.op_code === 'TIME_CUMULATIVE' || originalOp === 'TIME_CUMULATIVE' || originalOp === 'TIME_ACCUMULATOR' || params.type === 'time_cumulative';
+
+            const isFixed = (field.op_code === 'FIXED' || originalOp === 'HEX_RAW' || originalOp === 'FIXED' || field.op_code === 'HEX_RAW' || params.readOnly) && !isTimeCumulative;
 
             const isEditable = !isCalculated && !isFixed;
             const rawOptions = params.options;
@@ -197,6 +200,20 @@ export default function InstructionRunner({ instruction, onSend }) {
                 if (!displayValue) {
                     placeholder = 'NO DATA';
                 }
+            } else if (isTimeCumulative) {
+                // TIME CUMULATIVE LOGIC
+                // Value is Seconds since base_time (default: 2000-01-01 00:00:00)
+                const baseTimeStr = params.base_time || '2000-01-01T00:00:00';
+                const BASE_TIME = new Date(baseTimeStr.includes('T') ? baseTimeStr : baseTimeStr.replace(' ', 'T'));
+                const seconds = inputs[field.id] || 0;
+                const currentTime = new Date(BASE_TIME.getTime() + (seconds * 1000));
+
+                // Format: YYYY-MM-DD HH:mm:ss
+                const pad = n => n.toString().padStart(2, '0');
+                displayValue = `${currentTime.getFullYear()}-${pad(currentTime.getMonth() + 1)}-${pad(currentTime.getDate())} ${pad(currentTime.getHours())}:${pad(currentTime.getMinutes())}:${pad(currentTime.getSeconds())}`;
+                inputType = 'text'; // Show formatted text
+
+                // Override Input Props for Picker
             } else if (isCalculated || isEnum) {
                 // FIX: Priority to Computed Values for calculated fields
                 // If it's Enum, input is source of truth. If Calculated, computedValues is source.
@@ -262,6 +279,22 @@ export default function InstructionRunner({ instruction, onSend }) {
                 }
             };
 
+            const handleTimeClick = () => {
+                if (onOpenDatePicker) {
+                    // Calculate current ISO for picker
+                    const baseTimeStr = params.base_time || '2000-01-01T00:00:00';
+                    const BASE_TIME = new Date(baseTimeStr.includes('T') ? baseTimeStr : baseTimeStr.replace(' ', 'T'));
+                    const seconds = inputs[field.id] || 0;
+                    const currentIso = new Date(BASE_TIME.getTime() + (seconds * 1000)).toISOString();
+
+                    onOpenDatePicker(currentIso, (newIso) => {
+                        const newDate = new Date(newIso);
+                        const diffSeconds = Math.floor((newDate.getTime() - BASE_TIME.getTime()) / 1000);
+                        handleInputChange(field.id, diffSeconds); // Allow negative for "before base time"
+                    });
+                }
+            };
+
             return (
                 <div key={field.id} className={`${depth > 0 ? 'ml-6' : ''}`}>
                     <div className="group/field transition-all border-l-2 border-transparent hover:border-nier-light/10 focus-within:border-nier-light/30">
@@ -271,9 +304,10 @@ export default function InstructionRunner({ instruction, onSend }) {
                             onChange={handleChange}
                             type={inputType}
                             options={formattedOptions}
-                            readOnly={!isEditable}
-                            highlight={isCalculated}
-                            suffix={params.unit || ''}
+                            readOnly={!isEditable || isTimeCumulative} // ReadOnly if time (use click)
+                            onClick={isTimeCumulative ? handleTimeClick : undefined} // Trigger picker
+                            highlight={isCalculated || isTimeCumulative}
+                            suffix={params.unit || (isTimeCumulative ? 'TIME' : '')}
                             placeholder={placeholder}
                         />
                         {params.description && (

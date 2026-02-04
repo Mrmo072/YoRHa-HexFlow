@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import InstructionListSidebar from '../components/InstructionListSidebar';
 import InstructionRunner from '../components/InstructionForm/InstructionRunner';
 import { useInstructionData } from '../hooks/useInstructionData';
+import NieRDatePicker from '../components/NieRDatePicker';
 
 export default function InstructionProcessor() {
     // We rely solely on the hook to fetch from DB, matching the Management page behavior
@@ -13,8 +14,8 @@ export default function InstructionProcessor() {
         loadInstructions
     } = useInstructionData();
 
-
     const [searchTerm, setSearchTerm] = useState('');
+    const [datePickerState, setDatePickerState] = useState({ isOpen: false, value: null, onConfirmCallback: null });
 
     // Handle "Send" action (mock for now, or real API call)
     const handleSend = async (payload) => {
@@ -44,6 +45,7 @@ export default function InstructionProcessor() {
                     <InstructionRunner
                         instruction={currentInstruction}
                         onSend={handleSend}
+                        onOpenDatePicker={(val, cb) => setDatePickerState({ isOpen: true, value: val, onConfirmCallback: cb })}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-nier-dark/30 font-mono tracking-widest animate-pulse">
@@ -51,6 +53,13 @@ export default function InstructionProcessor() {
                     </div>
                 )}
             </section>
+
+            <NieRDatePicker
+                isOpen={datePickerState.isOpen}
+                initialValue={datePickerState.value}
+                onConfirm={(iso) => { datePickerState.onConfirmCallback && datePickerState.onConfirmCallback(iso); setDatePickerState(prev => ({ ...prev, isOpen: false })); }}
+                onCancel={() => setDatePickerState(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }
