@@ -49,7 +49,8 @@ export default function InstructionRunner({ instruction, onSend }) {
                         const type = String(f.type || f.parameter_config?.type || '').toLowerCase();
 
                         // Advanced Recognition: Length/Calculated
-                        const isCalculated = op === 'CALCULATED' || type === 'length' || type === 'calculated';
+                        // FIX: Explicitly include LENGTH_CALC and CHECKSUM_CRC
+                        const isCalculated = op === 'CALCULATED' || op === 'LENGTH_CALC' || op === 'CHECKSUM_CRC' || type === 'length' || type === 'calculated' || type === 'checksum';
 
                         // Advanced Recognition: Inputs
                         // FIX: Broaden Fixed detection. "Raw HEX" might be 'HEX' or just have a value.
@@ -60,7 +61,7 @@ export default function InstructionRunner({ instruction, onSend }) {
                         return {
                             id: f.id,
                             name: f.name || f.label,
-                            op_code: isInput ? 'INPUT' : (isCalculated ? 'CALCULATED' : 'FIXED'),
+                            op_code: isInput ? 'INPUT' : (['LENGTH_CALC', 'CHECKSUM_CRC', 'HEX_RAW'].includes(op) ? op : (isCalculated ? 'CALCULATED' : 'FIXED')),
                             original_op_code: f.op_code, // Preserve original for render logic fallback
                             parameter_config: {
                                 hex: f.hex_value, // Legacy mapping support if needed, mostly in param_config now
@@ -142,10 +143,11 @@ export default function InstructionRunner({ instruction, onSend }) {
     const renderFields = (fieldsToRender, depth = 0) => {
         return fieldsToRender.map((field) => {
             const params = field.parameter_config || {};
-            const isCalculated = field.op_code === 'CALCULATED' || params.formula === 'auto';
-
             // FIX: Robust check using preserved original_op_code
             const originalOp = String(field.original_op_code || '').toUpperCase();
+
+            // Re-apply robust classification logic in render time
+            const isCalculated = field.op_code === 'CALCULATED' || field.op_code === 'LENGTH_CALC' || field.op_code === 'CHECKSUM_CRC' || params.formula === 'auto' || params.type === 'length' || params.type === 'checksum';
             const isFixed = field.op_code === 'FIXED' || originalOp === 'HEX_RAW' || originalOp === 'FIXED' || field.op_code === 'HEX_RAW' || params.readOnly;
 
             const isEditable = !isCalculated && !isFixed;
@@ -196,7 +198,23 @@ export default function InstructionRunner({ instruction, onSend }) {
                     placeholder = 'NO DATA';
                 }
             } else if (isCalculated || isEnum) {
-                displayValue = inputs[field.id] !== undefined ? inputs[field.id] : (computedValues[field.id] || 0);
+                // FIX: Priority to Computed Values for calculated fields
+                // If it's Enum, input is source of truth. If Calculated, computedValues is source.
+                if (isCalculated) {
+                    displayValue = computedValues[field.id] !== undefined ? computedValues[field.id] : 0;
+                    inputType = 'hex'; // Usually Length/Checksum are hex
+                    // Auto-format for display
+                    if (typeof displayValue === 'number' && field.byte_len !== undefined) {
+                        if (field.byte_len === 0) {
+                            displayValue = '';
+                        } else {
+                            const targetLen = field.byte_len * 2;
+                            displayValue = displayValue.toString(16).toUpperCase().padStart(targetLen, '0').slice(-targetLen);
+                        }
+                    }
+                } else {
+                    displayValue = inputs[field.id] !== undefined ? inputs[field.id] : (computedValues[field.id] || 0);
+                }
             } else {
                 const rawValue = inputs[field.id];
                 if (field.byte_len && field.byte_len > 0) {
@@ -219,6 +237,22 @@ export default function InstructionRunner({ instruction, onSend }) {
             }
 
             const handleChange = (val) => {
+                // FIX: Enum handling for HEX strings
+                if (isEnum) {
+                    // If the value looks like a hex string (e.g. "AA"), parse it as base 16
+                    // But if it's already a number, just use it.
+                    const strVal = String(val);
+                    // Check if option value was intended as hex
+                    // We can try to match it against options to see the original type?
+                    // Or just generic "Auto Detect" approach:
+                    if (typeof val === 'string' && /^[0-9A-Fa-f]+$/.test(val)) {
+                        // It's a hex string (e.g. 'AA', '0A') form the option value
+                        const num = parseInt(val, 16);
+                        handleInputChange(field.id, isNaN(num) ? 0 : num);
+                        return;
+                    }
+                }
+
                 if (inputType === 'hex' && typeof val === 'string') {
                     // Convert hex string back to integer for storage
                     const num = parseInt(val, 16);

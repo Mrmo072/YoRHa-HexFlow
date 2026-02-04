@@ -49,9 +49,49 @@ export function formatFloatToHex(value) {
     const farr = new Float32Array(1);
     farr[0] = value;
     const barr = new Uint8Array(farr.buffer);
-    // Reverse for Big Endian if needed? Protocols vary. 
     // Standardizing on Big Endian (Network order). Barr is usually Little Endian on x86.
     return Array.from(barr).reverse()
         .map(b => b.toString(16).padStart(2, '0').toUpperCase())
         .join(' ');
+}
+
+// --- CHECKSUM ALGORITHMS ---
+
+export const ChecksumAlgo = {
+    SUM_8: 'SUM_8',
+    XOR_8: 'XOR_8',
+    CRC_16_MODBUS: 'CRC_16_MODBUS',
+    CRC_32: 'CRC_32'
+};
+
+export function calculateChecksum(algo, dataBytes) {
+    if (!dataBytes || dataBytes.length === 0) return 0;
+
+    switch (algo) {
+        case ChecksumAlgo.SUM_8:
+            return dataBytes.reduce((a, b) => (a + b) & 0xFF, 0);
+
+        case ChecksumAlgo.XOR_8:
+            return dataBytes.reduce((a, b) => a ^ b, 0);
+
+        case ChecksumAlgo.CRC_16_MODBUS: {
+            let crc = 0xFFFF;
+            for (let i = 0; i < dataBytes.length; i++) {
+                crc ^= dataBytes[i];
+                for (let j = 0; j < 8; j++) {
+                    if ((crc & 1) !== 0) {
+                        crc = (crc >> 1) ^ 0xA001;
+                    } else {
+                        crc = crc >> 1;
+                    }
+                }
+            }
+            return crc;
+        }
+
+        // Add more as needed
+        default:
+            console.warn(`Unknown Checksum Algo: ${algo}, returning 0`);
+            return 0;
+    }
 }
