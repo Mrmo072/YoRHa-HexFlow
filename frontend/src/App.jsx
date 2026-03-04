@@ -72,7 +72,7 @@ function Layout() {
                 {/* Brand */}
                 <div className="p-6 border-b border-nier-light/30">
                     <h1 className="text-2xl font-black tracking-tighter leading-none">HEX<br /><span className="text-lg font-light tracking-widest opacity-80">Orchestrator</span></h1>
-                    <div className="mt-2 text-[10px] font-mono opacity-40 uppercase">YoRHa Logic Unit</div>
+                    <div className="mt-2 text-[10px] font-mono opacity-40 uppercase">YoRHa-HexFlow Unit</div>
                 </div>
 
                 {/* Links */}

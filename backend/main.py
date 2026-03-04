@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.schemas.block import FrameRequest, CompileResponse
 from backend.core.graph import GraphEngine
 
-app = FastAPI(title="HexOrchestrator-YoRHa API")
+app = FastAPI(title="YoRHa-HexFlow API")
 
 # Setup CORS
 app.add_middleware(
@@ -16,7 +16,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "HexOrchestrator Logic Engine Online", "status": "Glory to Mankind"}
+    return {"message": "YoRHa-HexFlow Logic Engine Online", "status": "Glory to Mankind"}
 
 
 from backend.schemas.template import Layer, LayerType

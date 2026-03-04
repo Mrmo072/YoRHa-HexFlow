@@ -139,6 +139,12 @@ export default function InstructionRunner({ instruction, onSend, onOpenDatePicke
     const instructionCode = normalizedInstruction.code || normalizedInstruction.id;
     const instructionName = normalizedInstruction.name || normalizedInstruction.label || 'Unnamed Protocol';
 
+    // DRY Helper: Get Date object for the field's base time (epoch)
+    const getFieldEpoch = (params) => {
+        const baseTimeStr = params.base_time || '2000-01-01T00:00:00';
+        return new Date(baseTimeStr.includes('T') ? baseTimeStr : baseTimeStr.replace(' ', 'T'));
+    };
+
 
     const renderFields = (fieldsToRender, depth = 0) => {
         return fieldsToRender.map((field) => {
@@ -203,8 +209,7 @@ export default function InstructionRunner({ instruction, onSend, onOpenDatePicke
             } else if (isTimeCumulative) {
                 // TIME CUMULATIVE LOGIC
                 // Value is Seconds since base_time (default: 2000-01-01 00:00:00)
-                const baseTimeStr = params.base_time || '2000-01-01T00:00:00';
-                const BASE_TIME = new Date(baseTimeStr.includes('T') ? baseTimeStr : baseTimeStr.replace(' ', 'T'));
+                const BASE_TIME = getFieldEpoch(params);
                 const seconds = inputs[field.id] || 0;
                 const currentTime = new Date(BASE_TIME.getTime() + (seconds * 1000));
 
@@ -282,8 +287,7 @@ export default function InstructionRunner({ instruction, onSend, onOpenDatePicke
             const handleTimeClick = () => {
                 if (onOpenDatePicker) {
                     // Calculate current ISO for picker
-                    const baseTimeStr = params.base_time || '2000-01-01T00:00:00';
-                    const BASE_TIME = new Date(baseTimeStr.includes('T') ? baseTimeStr : baseTimeStr.replace(' ', 'T'));
+                    const BASE_TIME = getFieldEpoch(params);
                     const seconds = inputs[field.id] || 0;
                     const currentIso = new Date(BASE_TIME.getTime() + (seconds * 1000)).toISOString();
 
@@ -307,7 +311,7 @@ export default function InstructionRunner({ instruction, onSend, onOpenDatePicke
                             readOnly={!isEditable || isTimeCumulative} // ReadOnly if time (use click)
                             onClick={isTimeCumulative ? handleTimeClick : undefined} // Trigger picker
                             highlight={isCalculated || isTimeCumulative}
-                            suffix={params.unit || (isTimeCumulative ? 'TIME' : '')}
+                            suffix={params.unit || (isTimeCumulative ? `${getFieldEpoch(params).getFullYear()}` : '')}
                             placeholder={placeholder}
                         />
                         {params.description && (

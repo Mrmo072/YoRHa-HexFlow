@@ -1,5 +1,5 @@
 /**
- * Global Constants for YoRHa Application
+ * Global Constants for YoRHa-HexFlow Application
  */
 
 export const OP_CODES = {

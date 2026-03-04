@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): Instruction Processing Module
 
 ## 1. Introduction
-This module provides a dedicated "Run Mode" interface for YoRHa operators. It decouples the *definition* of an instruction (structure/schema) from its *execution* (parameter filling/sending). The primary goal is operational efficiency and error reduction during manual command transmission.
+This module provides a dedicated "Run Mode" interface for YoRHa-HexFlow operators. It decouples the *definition* of an instruction (structure/schema) from its *execution* (parameter filling/sending). The primary goal is operational efficiency and error reduction during manual command transmission.
 
 ## 2. User Stories
 

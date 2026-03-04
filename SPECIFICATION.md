@@ -1,4 +1,4 @@
-# YoRHa Instruction Editor - Technical Specification
+# YoRHa-HexFlow Instruction Editor - Technical Specification
 
 ## 1. 核心业务逻辑流程 (Core Business Workflow)
 

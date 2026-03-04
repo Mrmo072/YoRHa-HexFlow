@@ -1,37 +1,59 @@
-﻿# YoRHa: Hex Instruction Orchestrator
+﻿# YoRHa-HexFlow: Hex Instruction Orchestrator
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Frontend](https://img.shields.io/badge/Frontend-React_18_%7C_Vite-61DAFB)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI-009688)
 ![Style](https://img.shields.io/badge/Style-Nier:_Automata-dad4bb)
 
-**YoRHa** 是一个高度视觉化的 16 进制指令编制工具，旨在通过积木流 (Block Flow) 的方式简化复杂的底层二进制协议设计。其设计灵感来源于 *Nier: Automata* 的 UI 风格，强调交互的流畅性与沉浸感。
+**YoRHa-HexFlow** is a highly visual hexadecimal instruction orchestration tool designed to simplify complex low-level binary protocol design through a Block Flow approach. Its design is inspired by the UI style of *Nier: Automata*, emphasizing interaction fluidity and immersion.
 
-## ✨ 核心特性 (Key Features)
+<p align="center">
+  <img src="docs/images/screenshot_processing.png" alt="Instruction Processing Page" width="90%">
+</p>
 
-### 1. 可视化编排 (Visual Orchestration)
-- **拖拽式积木 (Drag & Drop)**: 基于 `@dnd-kit`，支持无限层级嵌套的积木拖拽与排序。
-- **动态泳道 (Swimlanes)**: 自动根据数据结构生成层级分明的泳道视图。
-- **智能连线**: 自动绘制积木间的逻辑引用关系（如校验和引用、长度计算引用）。
+<p align="center">
+  <img src="docs/images/preview_demo.gif" alt="Live Demo" width="90%">
+</p>
 
-### 2. 强大的逻辑引擎 (Logic Engine)
-- **实时公式计算**: 支持 `([FieldA] + 10) / 2` 形式的动态公式，前端实时预览计算结果。
-- **自动计数器 & 时间累计**: 内置 `AUTO_COUNTER` 和 `TIME_ACCUMULATOR` 等智能积木。
-- **多进制支持**: 属性面板支持 HEX/DEC/BIN 无缝切换输入。
+## ✨ Key Features
 
-### 3. 工程化与质量 (Engineering)
-- **SRP 架构**: 严格遵循单一职责原则，逻辑 Hook 化，组件原子化。
-- **全链路测试**: 
-  - 集成 `Vitest` + `React Testing Library`。
-  - 核心 Hooks 测试覆盖率 100%。
-  - 包含防崩溃的冒烟测试 (Smoke Tests)。
+### 1. Visual Orchestration
+- **Drag & Drop Blocks**: Based on `@dnd-kit`, supporting infinite nested block dragging and sorting.
+- **Dynamic Swimlanes**: Automatically generates hierarchical swimlane views based on data structure.
+- **Smart Connections**: Automatically draws logical relationships between blocks (e.g., checksum references, length calculation references).
+
+### 2. Powerful Logic Engine
+- **Real-time Formula Calculation**: Supports dynamic formulas like `([FieldA] + 10) / 2`, with real-time preview of calculation results on the frontend.
+- **Auto Counters & Time Accumulation**: Built-in intelligent blocks like `AUTO_COUNTER` and `TIME_ACCUMULATOR`.
+- **Multi-base Support**: Property panels support seamless switching between HEX/DEC/BIN input.
+
+### 3. Engineering & Quality
+- **SRP Architecture**: Strictly follows the Single Responsibility Principle, with logic hooked and components atomized.
+- **Full-link Testing**: 
+  - Integrated `Vitest` + `React Testing Library`.
+  - 100% test coverage for core hooks.
+  - Includes smoke tests to prevent crashes.
 
 ---
 
-## 🚀 快速启动 (Quick Start)
+## 🚀 Quick Start
 
-### 1. 后端服务 (Backend)
-提供数据持久化与核心业务 API。
+### 1. Database Setup
+Create the MySQL database and initialize the schema.
+
+```bash
+# Login to MySQL and create the database
+mysql -u root -p
+CREATE DATABASE tc CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+USE tc;
+
+# Execute schema and seed data
+SOURCE backend/db/migrations/schema.sql;
+SOURCE backend/db/migrations/seed_data.sql;
+```
+
+### 2. Backend Service
+Provides data persistence and core business APIs.
 
 ```bash
 # Windows
@@ -39,23 +61,23 @@ python -m venv venv
 .\venv\Scripts\activate
 pip install -r backend/requirements.txt
 
-# 启动 (http://127.0.0.1:8000)
+# Start (http://127.0.0.1:8000)
 python -m uvicorn backend.main:app --reload
 ```
 
-### 2. 前端界面 (Frontend)
-基于 React 18 + Vite 构建的交互界面。
+### 3. Frontend Interface
+An interactive interface built with React 18 + Vite.
 
 ```bash
 cd frontend
 npm install
 
-# 启动 (http://localhost:5173)
+# Start (http://localhost:5173)
 npm run dev
 ```
 
-### 3. 运行测试 (Run Tests) [NEW]
-确保代码修改的安全性与稳定性。
+### 4. Run Tests
+Ensures the safety and stability of code modifications.
 
 ```bash
 cd frontend
@@ -64,7 +86,7 @@ npm run test
 
 ---
 
-## 🏗️ 项目架构 (Architecture)
+## 🏗️ Architecture
 
 ```mermaid
 graph TD
@@ -85,31 +107,31 @@ graph TD
     end
 ```
 
-详细技术规格请参考: [SPECIFICATION.md](./SPECIFICATION.md)
+For detailed technical specifications, please refer to: [SPECIFICATION.md](./SPECIFICATION.md)
 
 ---
 
-## 📜 目录结构
+## 📜 Directory Structure
 
 ```
 /backend
-    /main.py            # FastAPI 入口
-    /models.py          # Pydantic 数据模型
+    /main.py            # FastAPI entry point
+    /models.py          # Pydantic data models
     
 /frontend
     /src
-        /components     # 原子 UI 组件 (Block, PropertiesPanel)
-        /hooks          # 业务逻辑 Hooks (Data, Selection)
-        /pages          # 页面级容器 (Instruction, Canvas)
-        /utils          # 纯函数工具 (Formula, Hex)
-        /constants.js   # 全局常量定义
-    /src/hooks/__tests__ # 单元测试套件
+        /components     # Atomic UI components (Block, PropertiesPanel)
+        /hooks          # Business logic Hooks (Data, Selection)
+        /pages          # Page-level containers (Instruction, Canvas)
+        /utils          # Pure function utilities (Formula, Hex)
+        /constants.js   # Global constant definitions
+    /src/hooks/__tests__ # Unit test suite
 ```
 
-## ⚠️ 开发规范 (Guidelines)
-1. **单一职责**: 单文件不超过 400 行，复杂逻辑必须提取 Hook。
-2. **测试驱动**: 修改核心逻辑后必须运行 `npm run test`。
-3. **DRY 原则**: 避免 Magic Strings，使用 `constants.js`。
+## ⚠️ Development Guidelines
+1. **Single Responsibility**: No single file should exceed 400 lines; complex logic must be extracted into Hooks.
+2. **Test-Driven**: `npm run test` must be run after modifying core logic.
+3. **DRY Principle**: Avoid Magic Strings; use `constants.js`.
 
 ---
 *Glory to Mankind.*
