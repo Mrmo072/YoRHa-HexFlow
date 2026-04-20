@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useInstructionLanes } from '../useInstructionLanes';
 
@@ -111,6 +111,6 @@ describe('useInstructionLanes', () => {
         // evaluateFormula logic handles undefined vars usually as 0 or error.
 
         // However, let's verify runtime safety
-        expect(item.parameter_config.computedValue).toBeDefined();
+        expect(item.parameter_config.computedValue).toBe('??');
     });
 });

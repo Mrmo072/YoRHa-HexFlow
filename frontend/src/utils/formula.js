@@ -21,8 +21,7 @@ export function evaluateFormula(formula, symbolTable) {
         // 3. Evaluate
         const result = new Function(`return (${processed})`)();
 
-        // Return number (allow decimals now)
-        return typeof result === 'number' && !isNaN(result) ? result : 0;
+        return typeof result === 'number' && !isNaN(result) ? Math.floor(result) : 0;
     } catch (err) {
         console.error("Formula Eval Error:", err);
         return 0;

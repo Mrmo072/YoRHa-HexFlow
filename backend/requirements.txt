@@ -1,0 +1,5 @@
+fastapi
+networkx
+pymysql
+sqlalchemy
+uvicorn

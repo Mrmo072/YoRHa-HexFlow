@@ -65,6 +65,13 @@ export default function Canvas({
 
     // useCanvasConnections Hook (Replaces lengthy useEffect)
     const { connectionPaths, hierarchyLines } = useCanvasConnections(lanes, selectedId, pickingMode, contentRef);
+    const lanesSignature = JSON.stringify(
+        lanes.map(lane => ({
+            parentId: lane.parentId ?? null,
+            depth: lane.depth ?? 0,
+            itemIds: (lane.items || []).map(item => item.id)
+        }))
+    );
 
     // SENSORS
     const sensors = useSensors(
@@ -83,7 +90,13 @@ export default function Canvas({
 
     // Local state for DnD visual updates
     const [localLanes, setLocalLanes] = useState(lanes);
-    useEffect(() => { setLocalLanes(lanes); }, [lanes]);
+    const previousLanesSignatureRef = useRef(lanesSignature);
+    useEffect(() => {
+        if (previousLanesSignatureRef.current !== lanesSignature) {
+            previousLanesSignatureRef.current = lanesSignature;
+            setLocalLanes(lanes);
+        }
+    }, [lanes, lanesSignature]);
 
     const handleDragStart = (event) => { setActiveDragId(event.active.id); }
 

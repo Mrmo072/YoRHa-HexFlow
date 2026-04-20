@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { v4 as uuidv4 } from 'uuid';
 import Protocol from './pages/Protocol';
 import Instruction from './pages/Instruction';
 import InstructionProcessor from './pages/InstructionProcessor';
@@ -8,42 +7,48 @@ import Orchestration from './pages/Orchestration';
 import Terminal from './pages/Terminal';
 import DataHub from './pages/DataHub';
 import GlitchEffect from './components/visuals/GlitchEffect';
-
-// Initial Data
-const INITIAL_PROTOCOL = {
-    id: 'root',
-    label: 'ROOT PROTOCOL',
-    type: 'container',
-    children: [
-        { id: '1', label: '帧头 (HEADER)', byte_length: 2, type: 'fixed', hex_value: 'FA FA' },
-        {
-            id: '2',
-            label: '包装层 (PACKAGING)',
-            type: 'container',
-            byte_length: 0,
-            children: [
-                { id: '2-1', label: '长度 (LEN)', byte_length: 1, type: 'length', config: {} }
-            ]
-        },
-        { id: '3', label: '帧尾 (TAIL)', byte_length: 1, type: 'fixed', hex_value: 'ED' }
-    ]
-};
-
-const INITIAL_INSTRUCTION = {
-    id: 'inst-1',
-    label: '默认指令 (DEFAULT)',
-    blocks: [
-        { id: '1', label: '指令 (CMD)', byte_length: 1, type: 'fixed', hex_value: '01' },
-        { id: '2', label: '载荷 (PAYLOAD)', byte_length: 4, type: 'fixed', hex_value: '00 00 00 00' }
-    ]
-};
+import { api } from './api';
 
 function Layout() {
     const location = useLocation();
+    const routeTitleMap = {
+        '/protocol': 'Protocol Definition',
+        '/instruction': 'Instruction Management',
+        '/processing': 'Instruction Processing',
+        '/orchestration': 'Orchestration Binding',
+        '/terminal': 'Communication Terminal',
+        '/datahub': 'Data Hub'
+    };
+    const currentRouteTitle = routeTitleMap[location.pathname] || 'YoRHa-HexFlow';
 
     // Global Data State (Lifted)
-    const [protocols, setProtocols] = useState([INITIAL_PROTOCOL]);
-    const [instructions, setInstructions] = useState([INITIAL_INSTRUCTION]);
+    const [protocols, setProtocols] = useState([]);
+    const [instructions, setInstructions] = useState([]);
+
+    useEffect(() => {
+        let alive = true;
+
+        const loadAppData = async () => {
+            try {
+                const [protocolData, instructionData] = await Promise.all([
+                    api.getProtocols(),
+                    api.getInstructions()
+                ]);
+                if (alive) {
+                    setProtocols(protocolData);
+                    setInstructions(instructionData);
+                }
+            } catch (error) {
+                console.error('Failed to load app-level data', error);
+            }
+        };
+
+        loadAppData();
+
+        return () => {
+            alive = false;
+        };
+    }, []);
 
     // Nav Item Helper
     const NavItem = ({ to, label, shortcut }) => (
@@ -110,16 +115,16 @@ function Layout() {
                         <span>OPERATIONAL // {new Date().toISOString().split('T')[0]}</span>
                     </div>
                     <div className="text-xs tracking-widest uppercase opacity-80">
-                        Project: Default_Protocol
+                        Page: {currentRouteTitle}
                     </div>
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-hidden relative flex flex-col">
+                <div key={location.pathname} className="flex-1 overflow-hidden relative flex flex-col">
                     <Routes>
                         <Route path="/" element={<Navigate to="/protocol" replace />} />
                         <Route path="/protocol" element={<Protocol protocols={protocols} setProtocols={setProtocols} />} />
-                        <Route path="/instruction" element={<Instruction instructions={instructions} setInstructions={setInstructions} />} />
+                        <Route path="/instruction" element={<Instruction onWebUpdate={setInstructions} />} />
                         <Route path="/processing" element={<InstructionProcessor />} />
                         <Route path="/orchestration" element={<Orchestration protocols={protocols} instructions={instructions} />} />
                         <Route path="/terminal" element={<Terminal />} />

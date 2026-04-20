@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Canvas from '../components/Canvas';
 import { v4 as uuidv4 } from 'uuid';
+import { api } from '../api';
 
 // Mock Initial Data (Recursive)
 
 
 export default function Protocol({ protocols, setProtocols }) {
     // Protocol List State - LIFTED to App.jsx
-    const [activeProtocolId, setActiveProtocolId] = useState(protocols[0]?.id || 'root');
+    const [activeProtocolId, setActiveProtocolId] = useState(protocols[0]?.id || null);
+    const [statusMsg, setStatusMsg] = useState('');
 
     // Update active ID if current is deleted/missing
     React.useEffect(() => {
-        if (!protocols.find(p => p.id === activeProtocolId) && protocols.length > 0) {
+        if (!activeProtocolId && protocols.length > 0) {
+            setActiveProtocolId(protocols[0].id);
+        } else if (!protocols.find(p => p.id === activeProtocolId) && protocols.length > 0) {
             setActiveProtocolId(protocols[0].id);
         }
     }, [protocols, activeProtocolId]);
@@ -20,12 +24,12 @@ export default function Protocol({ protocols, setProtocols }) {
     const currentProtocol = protocols.find(p => p.id === activeProtocolId) || protocols[0];
 
     // Navigation Path (Stack of Block IDs)
-    const [path, setPath] = useState([currentProtocol]);
+    const [path, setPath] = useState(currentProtocol ? [currentProtocol] : []);
 
     // reset path when protocol changes
     React.useEffect(() => {
-        setPath([currentProtocol]);
-    }, [activeProtocolId]);
+        setPath(currentProtocol ? [currentProtocol] : []);
+    }, [activeProtocolId, currentProtocol]);
 
     // Find current container in the LATEST currentProtocol tree to ensure we edit fresh state
     // (The path state might hold stale references, we need to find the equivalent node in currentProtocol)
@@ -41,29 +45,74 @@ export default function Protocol({ protocols, setProtocols }) {
         return null;
     };
 
-    const activeContainerNode = findNode(currentProtocol, path[path.length - 1].id) || currentProtocol;
-    const currentBlocks = activeContainerNode.children || [];
+    const activePathNode = path[path.length - 1];
+    const activeContainerNode = currentProtocol && activePathNode ? (findNode(currentProtocol, activePathNode.id) || currentProtocol) : currentProtocol;
+    const currentBlocks = activeContainerNode?.children || [];
+    const currentLanes = useMemo(() => [{
+        depth: 0,
+        parentId: null,
+        parentName: activeContainerNode?.label || 'ROOT SEQUENCE',
+        items: currentBlocks
+    }], [activeContainerNode, currentBlocks]);
 
     const [selectedId, setSelectedId] = useState(null);
 
     // CRUD Handlers for Protocols
-    const handleAddProtocol = () => {
+    const saveProtocol = async (nextProtocol) => {
+        try {
+            setStatusMsg('保存中...');
+            const saved = await api.updateProtocol(nextProtocol.id, {
+                label: nextProtocol.label,
+                type: nextProtocol.type,
+                description: nextProtocol.description || null,
+                children: nextProtocol.children || []
+            });
+            setProtocols(prev => prev.map(protocol => protocol.id === saved.id ? saved : protocol));
+            setStatusMsg('协议已保存');
+            setTimeout(() => setStatusMsg(''), 1200);
+            return saved;
+        } catch (error) {
+            console.error('Failed to save protocol', error);
+            setStatusMsg('协议保存失败');
+            throw error;
+        }
+    };
+
+    const handleAddProtocol = async () => {
         const newProto = {
             id: uuidv4(),
             label: '新协议 (NEW)',
             type: 'container',
             children: []
         };
-        setProtocols([...protocols, newProto]);
-        setActiveProtocolId(newProto.id);
+        try {
+            setStatusMsg('创建协议...');
+            const created = await api.createProtocol(newProto);
+            setProtocols([...protocols, created]);
+            setActiveProtocolId(created.id);
+            setStatusMsg('协议已创建');
+            setTimeout(() => setStatusMsg(''), 1200);
+        } catch (error) {
+            console.error('Failed to create protocol', error);
+            setStatusMsg('协议创建失败');
+        }
     };
 
-    const handleDeleteProtocol = (e, id) => {
+    const handleDeleteProtocol = async (e, id) => {
         e.stopPropagation();
         if (protocols.length <= 1) return;
-        const remaining = protocols.filter(p => p.id !== id);
-        setProtocols(remaining);
-        if (activeProtocolId === id) setActiveProtocolId(remaining[0].id);
+        try {
+            setStatusMsg('删除协议...');
+            await api.deleteProtocol(id);
+            const remaining = protocols.filter(p => p.id !== id);
+            setProtocols(remaining);
+            if (activeProtocolId === id) setActiveProtocolId(remaining[0].id);
+            setStatusMsg('协议已删除');
+            setTimeout(() => setStatusMsg(''), 1200);
+        } catch (error) {
+            console.error('Failed to delete protocol', error);
+            setStatusMsg('协议删除失败');
+        }
     };
 
     // Helper: Update the tree immutably
@@ -85,6 +134,7 @@ export default function Protocol({ protocols, setProtocols }) {
 
         // Update protocol list
         setProtocols(protocols.map(p => p.id === activeProtocolId ? newRoot : p));
+        saveProtocol(newRoot);
 
         // Path does not need update because we look up activeContainerNode dynamically
     };
@@ -135,8 +185,21 @@ export default function Protocol({ protocols, setProtocols }) {
 
     const selectedBlock = currentBlocks.find(b => b.id === selectedId);
 
+    if (!currentProtocol) {
+        return (
+            <div className="flex-1 flex items-center justify-center text-nier-light/40 font-mono tracking-widest">
+                LOADING PROTOCOLS...
+            </div>
+        );
+    }
+
     return (
         <div className="flex-1 flex overflow-hidden">
+            {statusMsg && (
+                <div className="absolute top-2 right-2 z-50 text-[10px] font-mono bg-nier-dark border border-nier-light px-2 text-nier-light animate-pulse">
+                    SYS: {statusMsg}
+                </div>
+            )}
             {/* Protocols List Sidebar */}
             <aside className="w-48 border-r border-nier-light/30 bg-nier-dark/50 flex flex-col">
                 <div className="p-4 border-b border-nier-light/30 flex justify-between items-center">
@@ -185,10 +248,19 @@ export default function Protocol({ protocols, setProtocols }) {
                 </div>
 
                 <Canvas
-                    items={currentBlocks}
-                    setItems={handleSetBlocks}
+                    lanes={currentLanes}
+                    onMoveItem={(itemId, _newParentId, newIndex) => {
+                        const reordered = [...currentBlocks];
+                        const oldIndex = reordered.findIndex(block => block.id === itemId);
+                        if (oldIndex === -1 || oldIndex === newIndex) return;
+                        const [moved] = reordered.splice(oldIndex, 1);
+                        reordered.splice(newIndex, 0, moved);
+                        handleSetBlocks(reordered);
+                    }}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
+                    focusedParentId={null}
+                    onSetFocusedLane={() => { }}
                 />
             </section>
 
@@ -207,6 +279,7 @@ export default function Protocol({ protocols, setProtocols }) {
                                 onChange={(e) => {
                                     const updatedProto = { ...currentProtocol, label: e.target.value };
                                     setProtocols(protocols.map(p => p.id === activeProtocolId ? updatedProto : p));
+                                    saveProtocol(updatedProto);
                                 }}
                                 className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide"
                             />

@@ -43,6 +43,16 @@ class OperatorTemplate(Base):
     param_template = Column(JSON, nullable=False) # UI render config
     description = Column(String(255))
 
+
+class ProtocolTemplate(Base):
+    __tablename__ = "protocols"
+
+    id = Column(String(36), primary_key=True)
+    label = Column(String(128), nullable=False)
+    type = Column(String(32), default="container", nullable=False)
+    description = Column(Text, nullable=True)
+    children = Column(JSON, nullable=False, default=list)
+
 # 3. Instruction Fields
 class InstructionField(Base):
     __tablename__ = "instruction_fields"

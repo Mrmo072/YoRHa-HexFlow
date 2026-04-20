@@ -1,22 +1,28 @@
-from sqlalchemy import create_engine
+from pathlib import Path
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from urllib.parse import quote_plus
 
-# Connection Config
-# USER provided: localhost:3306 root 123456 tc
-# NOTE: In production, use environment variables!
-password = quote_plus("123456")
-SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://root:{password}@localhost:3306/tc"
+# Project-local SQLite database for zero-config local runs.
+DB_PATH = Path(__file__).resolve().parent / "yorha.db"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    # pool_recycle=3600,
+    connect_args={"check_same_thread": False},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 def get_db():
     db = SessionLocal()

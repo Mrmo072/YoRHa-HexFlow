@@ -104,6 +104,7 @@ export const InstructionEncoder = {
         let value = 0;
         if (computedVal !== undefined) value = computedVal;
         else if (inputValue !== undefined) value = inputValue;
+        else if (params.hex && (op === 'FIXED' || op === 'HEADER' || op === 'TAIL')) return this.parseHexBytes(params.hex);
         else if (op === 'HEX_RAW' && params.hex) return this.parseHexBytes(params.hex); // Raw Hex string
         else value = params.value || 0;
 

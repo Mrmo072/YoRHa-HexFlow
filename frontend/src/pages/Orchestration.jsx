@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Canvas from '../components/Canvas';
 
@@ -19,7 +19,17 @@ export default function Orchestration({ protocols, instructions }) {
             setBindings([initial]);
             setActiveBindingId(initial.id);
         }
-    }, []);
+    }, [bindings.length, instructions, protocols]);
+
+    useEffect(() => {
+        if (!bindings.length) return;
+
+        setBindings(prev => prev.map(binding => ({
+            ...binding,
+            protocolId: binding.protocolId || protocols[0]?.id,
+            instructionId: binding.instructionId || instructions[0]?.id
+        })));
+    }, [instructions, protocols]);
 
     const currentBinding = bindings.find(b => b.id === activeBindingId) || bindings[0];
 
@@ -56,6 +66,25 @@ export default function Orchestration({ protocols, instructions }) {
 
         if (!protocol) return [];
 
+        const normalizeInstructionBlocks = (instruction) => {
+            const blocks = instruction?.blocks;
+            if (blocks?.length) return blocks;
+
+            const fields = instruction?.fields || [];
+            const fieldMap = new Map(fields.map(field => [field.id, { ...field, label: field.label || field.name, children: [] }]));
+            const roots = [];
+
+            fieldMap.forEach(field => {
+                if (field.parent_id && fieldMap.has(field.parent_id)) {
+                    fieldMap.get(field.parent_id).children.push(field);
+                } else {
+                    roots.push(field);
+                }
+            });
+
+            return roots.sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+        };
+
         // Deep Clone to avoid mutating original AND Prefix IDs to avoid collisions
         const cloneBlocks = (blocks, prefix) => {
             return blocks.map(b => {
@@ -78,7 +107,7 @@ export default function Orchestration({ protocols, instructions }) {
         // If no slot found, we append to the end of the root container (fallback).
 
         if (instruction) {
-            const instructionBlocks = cloneBlocks(instruction.blocks, 'i');
+            const instructionBlocks = cloneBlocks(normalizeInstructionBlocks(instruction), 'i');
 
             const injectIntoSlot = (nodes) => {
                 for (let i = 0; i < nodes.length; i++) {
@@ -108,7 +137,24 @@ export default function Orchestration({ protocols, instructions }) {
         return mergedRoot.children || [];
     };
 
-    const mergedBlocks = getMergedBlocks();
+    const mergedBlocks = useMemo(() => getMergedBlocks(), [currentBinding, instructions, protocols]);
+    const buildLanes = (nodes, parentId = null, parentName = 'ROOT SEQUENCE', depth = 0) => {
+        const lanes = [{
+            depth,
+            parentId,
+            parentName,
+            items: nodes || []
+        }];
+
+        (nodes || []).forEach(node => {
+            if (node.children?.length) {
+                lanes.push(...buildLanes(node.children, node.id, node.label || node.name || 'GROUP CONTENT', depth + 1));
+            }
+        });
+
+        return lanes;
+    };
+    const mergedLanes = useMemo(() => buildLanes(mergedBlocks), [mergedBlocks]);
 
     // Flatten for simple display (optional, but our Canvas supports recursive now)
     // But for a linear "Hex View" we might need a flat list.
@@ -123,6 +169,7 @@ export default function Orchestration({ protocols, instructions }) {
         return total;
     };
     const totalBytes = getTotalBytes(mergedBlocks);
+    const selectedInstruction = instructions.find(i => i.id === currentBinding?.instructionId);
 
     return (
         <div className="flex-1 flex overflow-hidden">
@@ -172,7 +219,7 @@ export default function Orchestration({ protocols, instructions }) {
                                     onChange={(e) => handleUpdateBinding(currentBinding.id, { instructionId: e.target.value })}
                                     className="bg-transparent border-b border-nier-light/50 text-sm focus:outline-none focus:border-nier-light py-1 font-mono"
                                 >
-                                    {instructions.map(i => <option key={i.id} value={i.id} className="bg-nier-dark text-white">{i.label}</option>)}
+                                    {instructions.map(i => <option key={i.id} value={i.id} className="bg-nier-dark text-white">{i.label || i.name}</option>)}
                                 </select>
                             </div>
 
@@ -189,15 +236,17 @@ export default function Orchestration({ protocols, instructions }) {
                     <div className="absolute top-4 left-6 text-xs font-mono opacity-50 tracking-widest">
                         ASSEMBLY PREVIEW //
                         {protocols.find(p => p.id === currentBinding?.protocolId)?.label} ::
-                        {instructions.find(i => i.id === currentBinding?.instructionId)?.label}
+                        {selectedInstruction?.label || selectedInstruction?.name}
                     </div>
 
                     <Canvas
-                        items={mergedBlocks}
-                        setItems={() => { }} // Read-only
+                        lanes={mergedLanes}
+                        onMoveItem={() => { }}
                         selectedId={null}
                         onSelect={() => { }}
-                        readOnly={true}
+                        isReadOnly={true}
+                        focusedParentId={null}
+                        onSetFocusedLane={() => { }}
                     />
                 </div>
 

@@ -39,40 +39,36 @@
 ## 🚀 Quick Start
 
 ### 1. Database Setup
-Create the MySQL database and initialize the schema.
+The project now defaults to the repository-local SQLite database at `backend/db/yorha.db`. Tables, operator templates, and sample instructions are created automatically on first startup.
 
 ```bash
-# Login to MySQL and create the database
-mysql -u root -p
-CREATE DATABASE tc CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-USE tc;
-
-# Execute schema and seed data
-SOURCE backend/db/migrations/schema.sql;
-SOURCE backend/db/migrations/seed_data.sql;
+# No external database service required
 ```
 
-### 2. Backend Service
-Provides data persistence and core business APIs.
+### 2. One-Click Startup
+On Windows, use the root script to boot both backend and frontend.
 
 ```bash
-# Windows
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r backend/requirements.txt
+.\start-dev.ps1
+```
 
-# Start (http://127.0.0.1:8000)
+The script will:
+- install missing Python dependencies for the backend
+- install missing Node dependencies for the frontend
+- start the FastAPI backend on `http://127.0.0.1:8000`
+- start the Vite frontend on `http://127.0.0.1:5173` when available, otherwise another free port
+
+### 3. Manual Startup
+If you want to run each side separately:
+
+```bash
+# Backend
+python -m pip install -r backend/requirements.txt
 python -m uvicorn backend.main:app --reload
-```
 
-### 3. Frontend Interface
-An interactive interface built with React 18 + Vite.
-
-```bash
+# Frontend
 cd frontend
 npm install
-
-# Start (http://localhost:5173)
 npm run dev
 ```
 

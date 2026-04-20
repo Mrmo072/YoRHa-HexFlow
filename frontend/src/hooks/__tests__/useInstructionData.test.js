@@ -144,4 +144,21 @@ describe('useInstructionData', () => {
             expect(current.name).toBe('Test 1');
         });
     });
+
+    it('should clear invalid active selection after filtering reload', async () => {
+        const { result } = renderHook(() => useInstructionData());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        act(() => {
+            result.current.setActiveInstructionId('inst-2');
+        });
+
+        api.getInstructions.mockResolvedValueOnce([{ id: 'inst-1', name: 'Test 1', fields: [] }]);
+
+        await act(async () => {
+            await result.current.loadInstructions('inst-1');
+        });
+
+        expect(result.current.activeInstructionId).toBe('inst-1');
+    });
 });

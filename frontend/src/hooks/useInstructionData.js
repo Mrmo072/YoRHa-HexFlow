@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../api';
 
 export function useInstructionData(onWebUpdate) {
@@ -8,13 +8,59 @@ export function useInstructionData(onWebUpdate) {
     const [statusMsg, setStatusMsg] = useState('');
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [operatorTemplates, setOperatorTemplates] = useState({});
+    const isMountedRef = useRef(true);
+    const instructionsRef = useRef([]);
+    const activeInstructionIdRef = useRef(null);
+    const statusTimerRef = useRef(null);
 
     // Computed property for easy access
-    const currentInstruction = instructions.find(i => i.id === activeInstructionId);
+    const currentInstruction = useMemo(
+        () => instructions.find(i => i.id === activeInstructionId) || null,
+        [instructions, activeInstructionId]
+    );
 
-    // Load Initial Data
     useEffect(() => {
-        loadData();
+        activeInstructionIdRef.current = activeInstructionId;
+    }, [activeInstructionId]);
+
+    useEffect(() => {
+        instructionsRef.current = instructions;
+    }, [instructions]);
+
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+            if (statusTimerRef.current) {
+                clearTimeout(statusTimerRef.current);
+            }
+        };
+    }, []);
+
+    const showStatus = useCallback((message, durationMs = 0) => {
+        if (!isMountedRef.current) return;
+
+        if (statusTimerRef.current) {
+            clearTimeout(statusTimerRef.current);
+            statusTimerRef.current = null;
+        }
+
+        setStatusMsg(message);
+
+        if (durationMs > 0) {
+            statusTimerRef.current = setTimeout(() => {
+                if (isMountedRef.current) {
+                    setStatusMsg('');
+                }
+            }, durationMs);
+        }
+    }, []);
+
+    const reconcileActiveInstruction = useCallback((nextInstructions, preferredId = activeInstructionIdRef.current) => {
+        const nextActiveId = nextInstructions.some(i => i.id === preferredId)
+            ? preferredId
+            : (nextInstructions[0]?.id ?? null);
+        setActiveInstructionId(nextActiveId);
+        return nextActiveId;
     }, []);
 
     const loadData = useCallback(async () => {
@@ -24,36 +70,46 @@ export function useInstructionData(onWebUpdate) {
                 api.getInstructions(),
                 api.getOperatorTemplates()
             ]);
+            if (!isMountedRef.current) return;
             setInstructions(instData);
 
             const opMap = {};
             opData.forEach(op => opMap[op.op_code] = op);
             setOperatorTemplates(opMap);
-
-            if (instData.length > 0) {
-                // If no active selection, default to first.
-                // We use callback to check current state safely if strictly needed,
-                // but for init, checking 'activeInstructionId' from scope is fine 
-                // IF we don't depend on it for the fetch itself.
-                setActiveInstructionId(prev => prev || instData[0].id);
-            }
+            reconcileActiveInstruction(instData);
             if (onWebUpdate) onWebUpdate(instData);
         } catch (err) {
             console.error("Failed to load data", err);
-            setStatusMsg('离线模式 / 数据库错误');
+            showStatus('离线模式 / 数据库错误');
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) {
+                setIsLoading(false);
+            }
         }
-    }, [onWebUpdate]); // Removed activeInstructionId dependence to prevent loops
+    }, [onWebUpdate, reconcileActiveInstruction, showStatus]);
+
+    // Load Initial Data
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const loadInstructions = useCallback(async (search = '') => {
         setIsLoading(true);
         try {
             const data = await api.getInstructions(search);
+            if (!isMountedRef.current) return;
             setInstructions(data);
+            reconcileActiveInstruction(data);
             setHasUnsavedChanges(false);
-        } catch (err) { console.error(err); } finally { setIsLoading(false); }
-    }, []);
+        } catch (err) {
+            console.error(err);
+            showStatus('指令列表加载失败');
+        } finally {
+            if (isMountedRef.current) {
+                setIsLoading(false);
+            }
+        }
+    }, [reconcileActiveInstruction, showStatus]);
 
     const updateLocalInstruction = useCallback((updatedInst) => {
         setInstructions(prev => prev.map(i => i.id === updatedInst.id ? updatedInst : i));
@@ -72,20 +128,21 @@ export function useInstructionData(onWebUpdate) {
             };
             try {
                 const created = await api.createInstruction(newInstPayload);
+                if (!isMountedRef.current) return;
                 setInstructions(prev => [...prev, created]);
                 setActiveInstructionId(created.id);
                 setHasUnsavedChanges(false);
             } catch (e) {
                 if (e.response && e.response.status === 400) {
-                    setStatusMsg(e.response.data.detail);
+                    showStatus(e.response.data.detail);
                 }
             }
         };
 
         if (hasUnsavedChanges && openConfirmCallback) {
-            openConfirmCallback("检测到未保存的更改。\n是否覆盖？", doAdd);
+            return openConfirmCallback("检测到未保存的更改。\n是否覆盖？", doAdd);
         } else {
-            doAdd();
+            return doAdd();
         }
     };
 
@@ -93,36 +150,36 @@ export function useInstructionData(onWebUpdate) {
         const doDelete = async () => {
             try {
                 await api.deleteInstruction(id);
-                const rem = instructions.filter(i => i.id !== id);
+                if (!isMountedRef.current) return;
+                const rem = instructionsRef.current.filter(i => i.id !== id);
                 setInstructions(rem);
-                if (activeInstructionId === id) setActiveInstructionId(rem[0]?.id || null);
+                reconcileActiveInstruction(rem, activeInstructionIdRef.current === id ? null : activeInstructionIdRef.current);
                 setHasUnsavedChanges(false);
             } catch (e) { }
         };
 
         if (openConfirmCallback) {
-            openConfirmCallback("警告：确认永久删除此指令？", doDelete);
+            return openConfirmCallback("警告：确认永久删除此指令？", doDelete);
         } else {
-            doDelete();
+            return doDelete();
         }
     };
 
     const saveChanges = async (openConfirmCallback) => {
         if (!currentInstruction) return;
         try {
-            setStatusMsg('保存中...');
+            showStatus('保存中...');
             await api.updateInstruction(currentInstruction.id, currentInstruction);
-            setStatusMsg('已保存');
+            showStatus('已保存', 1000);
             setHasUnsavedChanges(false);
             if (onWebUpdate) onWebUpdate(instructions);
-            setTimeout(() => setStatusMsg(''), 1000);
         } catch (e) {
             console.error(e);
             if (e.response && e.response.status === 400 && openConfirmCallback) {
-                setStatusMsg(e.response.data.detail);
+                showStatus(e.response.data.detail);
                 openConfirmCallback(`保存失败：\n${e.response.data.detail}`, () => { });
             } else {
-                setStatusMsg('保存失败');
+                showStatus('保存失败');
             }
         }
     };

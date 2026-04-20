@@ -39,40 +39,39 @@
 ## 🚀 快速启动 (Quick Start)
 
 ### 1. 数据库初始化 (Database)
-创建 MySQL 数据库并初始化表结构。
+项目默认使用仓库内的 SQLite 数据库 `backend/db/yorha.db`，首次启动会自动建表并补充算子模板与示例指令数据。
 
 ```bash
-# 登录 MySQL 并创建数据库
-mysql -u root -p
-CREATE DATABASE tc CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-USE tc;
-
-# 执行建表与种子数据
-SOURCE backend/db/migrations/schema.sql;
-SOURCE backend/db/migrations/seed_data.sql;
+# 无需额外数据库服务
+# 首次启动后会自动生成/更新 backend/db/yorha.db
 ```
 
-### 2. 后端服务 (Backend)
-提供数据持久化与核心业务 API。
+### 2. 一键启动 (Recommended)
+Windows 下可直接使用根目录脚本同时拉起前后端。
 
 ```bash
-# Windows
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r backend/requirements.txt
+# 双击 start-dev.bat
+# 或在 PowerShell 中执行
+.\start-dev.ps1
+```
 
-# 启动 (http://127.0.0.1:8000)
+脚本会自动：
+- 检查并安装后端 Python 依赖
+- 检查并安装前端 Node 依赖
+- 启动 FastAPI 后端 (`http://127.0.0.1:8000`)
+- 启动 Vite 前端（优先 `http://127.0.0.1:5173`，被占用时自动换端口）
+
+### 3. 手动启动 (Advanced)
+如需分别启动，可按下面方式运行。
+
+```bash
+# Backend
+python -m pip install -r backend/requirements.txt
 python -m uvicorn backend.main:app --reload
-```
 
-### 3. 前端界面 (Frontend)
-基于 React 18 + Vite 构建的交互界面。
-
-```bash
+# Frontend
 cd frontend
 npm install
-
-# 启动 (http://localhost:5173)
 npm run dev
 ```
 

@@ -29,7 +29,6 @@ vi.mock('../../hooks/useInstructionData', () => ({
         updateLocalInstruction: vi.fn(),
         saveChanges: vi.fn(),
         revertChanges: vi.fn(),
-        revertChanges: vi.fn(),
         statusMsg: '',
         hasUnsavedChanges: false,
         currentInstruction: { id: 'mock', fields: [] },

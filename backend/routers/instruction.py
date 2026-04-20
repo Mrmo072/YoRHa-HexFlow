@@ -6,6 +6,7 @@ import uuid
 
 from backend.db.database import get_db, engine, Base
 from backend.db.models import Instruction, InstructionField
+from backend.db.seed import seed_sample_instructions
 from backend.schemas.instruction_api import InstructionCreate, InstructionResponse, InstructionFieldSchema, InstructionUpdate
 
 # Create tables if not exist (Simple migration)
@@ -16,6 +17,17 @@ router = APIRouter(
     prefix="/instructions",
     tags=["instructions"]
 )
+
+
+@router.on_event("startup")
+def seed_instructions():
+    from backend.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        seed_sample_instructions(db)
+    finally:
+        db.close()
 
 # HELPER: Recursive Save
 # HELPER: Flat Save (Trust Payload)

@@ -9,6 +9,10 @@ venv/
 node_modules/
 dist/
 .DS_Store
+.runtime/
+backend/db/*.db-shm
+backend/db/*.db-journal
+backend/db/*.db-wal
 
 # User specific
 .idea/

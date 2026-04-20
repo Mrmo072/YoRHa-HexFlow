@@ -14,6 +14,37 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
+    // Protocols
+    getProtocols: async () => {
+        const response = await fetch(`${API_BASE}/protocols/`);
+        return handleResponse(response);
+    },
+
+    createProtocol: async (data) => {
+        const response = await fetch(`${API_BASE}/protocols/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        return handleResponse(response);
+    },
+
+    updateProtocol: async (id, data) => {
+        const response = await fetch(`${API_BASE}/protocols/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        return handleResponse(response);
+    },
+
+    deleteProtocol: async (id) => {
+        const response = await fetch(`${API_BASE}/protocols/${id}`, {
+            method: 'DELETE'
+        });
+        return handleResponse(response);
+    },
+
     // Instructions
     getInstructions: async (search = '') => {
         const response = await fetch(`${API_BASE}/instructions/?search=${encodeURIComponent(search)}`);

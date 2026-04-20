@@ -6,39 +6,63 @@ export function useInstructionLanes(currentInstruction, activeInstructionId) {
     const [expandedGroupIds, setExpandedGroupIds] = useState([]);
     // focusedParentId: The 'parentId' of the lane currently in focus. null = Root.
     const [focusedParentId, setFocusedParentId] = useState(null);
+    const allFields = currentInstruction?.fields || [];
+
+    const fieldById = useMemo(() => {
+        const map = new Map();
+        allFields.forEach(field => {
+            map.set(field.id, field);
+        });
+        return map;
+    }, [allFields]);
+
+    const childrenByParentId = useMemo(() => {
+        const map = new Map();
+
+        allFields.forEach(field => {
+            const parentId = field.parent_id || null;
+            const siblings = map.get(parentId) || [];
+            siblings.push(field);
+            map.set(parentId, siblings);
+        });
+
+        for (const siblings of map.values()) {
+            siblings.sort((a, b) => a.sequence - b.sequence);
+        }
+
+        return map;
+    }, [allFields]);
+
+    const groupIds = useMemo(
+        () => allFields.filter(f => f.op_code === 'ARRAY_GROUP').map(f => f.id),
+        [allFields]
+    );
 
     // Reset Group Path when switching instructions & Default Expand All
     useEffect(() => {
-        if (currentInstruction && currentInstruction.fields) {
-            const allGroupIds = currentInstruction.fields
-                .filter(f => f.op_code === 'ARRAY_GROUP')
-                .map(f => f.id);
-            setExpandedGroupIds(allGroupIds);
-        } else {
-            setExpandedGroupIds([]);
-        }
-        setFocusedParentId(null);
-    }, [activeInstructionId]); // Depend on ID change to reset
+        setExpandedGroupIds(prev => {
+            if (prev.length === groupIds.length && prev.every((id, index) => id === groupIds[index])) {
+                return prev;
+            }
+            return groupIds;
+        });
+        setFocusedParentId(prev => (prev === null ? prev : null));
+    }, [activeInstructionId, groupIds]); // Depend on ID change to reset
 
     // Compute Lanes for Canvas (Recursive Tree)
     const uiLanes = useMemo(() => {
-        if (!currentInstruction?.fields) return [];
+        if (allFields.length === 0) return [];
 
         const lanes = [];
-        const allFields = currentInstruction.fields;
 
         // Recursive helper to build lanes in DFS order
         const buildLanes = (parentId, depth) => {
-            // 1. Find blocks in this container
-            const items = allFields.filter(f => {
-                const pId = f.parent_id || null;
-                return pId === parentId;
-            }).sort((a, b) => a.sequence - b.sequence);
+            const items = childrenByParentId.get(parentId) || [];
 
             // 2. Find Parent Name for display
             let parentName = "ROOT SEQUENCE";
             if (parentId) {
-                const parentBlock = allFields.find(f => f.id === parentId);
+                const parentBlock = fieldById.get(parentId);
                 parentName = parentBlock ? (parentBlock.name || parentBlock.label) : "UNKNOWN GROUP";
             }
 
@@ -61,11 +85,10 @@ export function useInstructionLanes(currentInstruction, activeInstructionId) {
         buildLanes(null, 0); // Start at Root
         return lanes;
 
-    }, [currentInstruction?.fields, expandedGroupIds]);
+    }, [allFields.length, childrenByParentId, expandedGroupIds, fieldById]);
 
     // LIVE FORMULA EVALUATION
     const processedLanes = useMemo(() => {
-        const allFields = currentInstruction?.fields || [];
         const nameToValueMap = {};
         allFields.forEach(f => {
             if (f.op_code === 'ARRAY_GROUP') {
@@ -82,9 +105,12 @@ export function useInstructionLanes(currentInstruction, activeInstructionId) {
                 // 1. Length Calculation
                 if (f.op_code === 'LENGTH_CALC') {
                     const formula = f.parameter_config?.formula;
+                    if (!formula) {
+                        return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
+                    }
                     try {
                         const involvedVars = formula.match(/\[([^\]]+)\]/g)?.map(m => m.slice(1, -1)) || [];
-                        const hasUnknown = involvedVars.some(v => nameToValueMap[v] === "??");
+                        const hasUnknown = involvedVars.some(v => !(v in nameToValueMap) || nameToValueMap[v] === "??");
                         if (hasUnknown) return { ...f, parameter_config: { ...f.parameter_config, computedValue: "??" } };
 
                         const result = evaluateFormula(formula, nameToValueMap);
@@ -117,7 +143,7 @@ export function useInstructionLanes(currentInstruction, activeInstructionId) {
                 return f;
             })
         }));
-    }, [uiLanes, currentInstruction?.fields]);
+    }, [allFields, uiLanes]);
 
     const handleNavigateGroup = (groupId) => {
         setExpandedGroupIds(prev => {
