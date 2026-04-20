@@ -54,6 +54,41 @@ def save_field_flat(db: Session, field_data: InstructionFieldSchema, instruction
     db.add(db_field)
 
 
+def serialize_instruction(db_inst: Instruction) -> InstructionResponse:
+    sorted_fields = sorted(
+        db_inst.fields,
+        key=lambda field: ((field.parent_id or ''), field.sequence, field.name, field.id)
+    )
+
+    response_fields = [
+        InstructionFieldSchema(
+            id=field.id,
+            parent_id=field.parent_id,
+            sequence=field.sequence,
+            name=field.name,
+            op_code=field.op_code,
+            byte_len=field.byte_len,
+            endianness=field.endianness,
+            repeat_type=field.repeat_type,
+            repeat_ref_id=field.repeat_ref_id,
+            repeat_count=field.repeat_count,
+            parameter_config=field.parameter_config or {},
+            children=[]
+        )
+        for field in sorted_fields
+    ]
+
+    return InstructionResponse(
+        id=db_inst.id,
+        device_code=db_inst.device_code,
+        code=db_inst.code,
+        name=db_inst.name,
+        description=db_inst.description,
+        type=db_inst.type,
+        fields=response_fields
+    )
+
+
 
 @router.get("/", response_model=List[InstructionResponse])
 def get_instructions(search: str = None, db: Session = Depends(get_db)):
@@ -61,23 +96,15 @@ def get_instructions(search: str = None, db: Session = Depends(get_db)):
     if search:
         query = query.filter(or_(Instruction.name.contains(search), Instruction.code.contains(search)))
     instructions = query.all()
-    # Sort fields by sequence
-    for i in instructions:
-        i.fields.sort(key=lambda x: x.sequence)
-    return instructions
+    return [serialize_instruction(instruction) for instruction in instructions]
 
 @router.get("/{id}", response_model=InstructionResponse)
 def get_instruction_detail(id: str, db: Session = Depends(get_db)):
     inst = db.query(Instruction).filter(Instruction.id == id).first()
     if not inst:
         raise HTTPException(status_code=404, detail="Instruction not found")
-    
-    # Sort flat list by sequence for consistency
-    inst.fields.sort(key=lambda x: x.sequence)
-    
-    return inst
-    
-    return inst
+
+    return serialize_instruction(inst)
 
 @router.post("/", response_model=InstructionResponse)
 def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
@@ -108,13 +135,7 @@ def create_instruction(inst: InstructionCreate, db: Session = Depends(get_db)):
     
     db.refresh(new_inst)
     
-    # Prepare response (fields need sorting probably, but DB order is not guaranteed, relying on sequence)
-    roots = [f for f in new_inst.fields if f.parent_id is None]
-    
-    # Ideally should sort here too
-    roots.sort(key=lambda x: x.sequence)
-    
-    return new_inst # ORM relation should handle fields structure if Schema is correct
+    return serialize_instruction(new_inst)
 
 @router.put("/{id}", response_model=InstructionResponse)
 def update_instruction(id: str, updates: InstructionUpdate, db: Session = Depends(get_db)):
@@ -146,7 +167,7 @@ def update_instruction(id: str, updates: InstructionUpdate, db: Session = Depend
     
     db.commit()
     db.refresh(db_inst)
-    return db_inst
+    return serialize_instruction(db_inst)
 
 @router.delete("/{id}")
 def delete_instruction(id: str, db: Session = Depends(get_db)):

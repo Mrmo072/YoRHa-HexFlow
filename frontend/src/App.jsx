@@ -124,8 +124,8 @@ function Layout() {
                     <Routes>
                         <Route path="/" element={<Navigate to="/protocol" replace />} />
                         <Route path="/protocol" element={<Protocol protocols={protocols} setProtocols={setProtocols} />} />
-                        <Route path="/instruction" element={<Instruction onWebUpdate={setInstructions} />} />
-                        <Route path="/processing" element={<InstructionProcessor />} />
+                        <Route path="/instruction" element={<Instruction instructions={instructions} setInstructions={setInstructions} onWebUpdate={setInstructions} />} />
+                        <Route path="/processing" element={<InstructionProcessor instructions={instructions} setInstructions={setInstructions} />} />
                         <Route path="/orchestration" element={<Orchestration protocols={protocols} instructions={instructions} />} />
                         <Route path="/terminal" element={<Terminal />} />
                         <Route path="/datahub" element={<DataHub />} />

@@ -46,7 +46,7 @@ class InstructionFieldSchema(BaseModel):
     # Parameter Config
     parameter_config: Optional[Dict[str, Any]] = None
     
-    children: List['InstructionFieldSchema'] = []
+    children: List['InstructionFieldSchema'] = Field(default_factory=list)
     
     class Config:
         from_attributes = True
@@ -62,14 +62,14 @@ class InstructionBase(BaseModel):
     type: InstructionType = InstructionType.DYNAMIC
 
 class InstructionCreate(InstructionBase):
-    fields: List[InstructionFieldSchema] = []
+    fields: List[InstructionFieldSchema] = Field(default_factory=list)
 
 class InstructionUpdate(InstructionBase):
-    fields: List[InstructionFieldSchema] = []
+    fields: List[InstructionFieldSchema] = Field(default_factory=list)
 
 class InstructionResponse(InstructionBase):
     id: str
-    fields: List[InstructionFieldSchema] = []
+    fields: List[InstructionFieldSchema] = Field(default_factory=list)
     
     class Config:
         from_attributes = True

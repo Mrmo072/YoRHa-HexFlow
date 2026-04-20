@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ParamConfigForm from './ParamConfigForm';
 import { v4 as uuidv4 } from 'uuid';
 
+const controlledValue = (value, fallback = '') => (value ?? fallback);
+
 export default function BlockPropertiesPanel({
     selectedBlock,
     currentInstruction, // { id, name, code, device_code, fields }
@@ -179,7 +181,7 @@ export default function BlockPropertiesPanel({
                     </div>
                     <div className="flex flex-col gap-1">
                         <label className="text-xs opacity-70 uppercase tracking-widest">指令名称 (Name)</label>
-                        <input type="text" value={currentInstruction.name || currentInstruction.label} onChange={(e) => onUpdateInstruction({ ...currentInstruction, name: e.target.value })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide" />
+                        <input type="text" value={controlledValue(currentInstruction.name ?? currentInstruction.label, '')} onChange={(e) => onUpdateInstruction({ ...currentInstruction, name: e.target.value })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide" />
                     </div>
 
                     {/* Instruction Actions */}
@@ -205,12 +207,12 @@ export default function BlockPropertiesPanel({
 
                     <div className="flex flex-col gap-1">
                         <label className="text-xs opacity-70 uppercase tracking-widest">字段标签 (Label)</label>
-                        <input type="text" value={tempBlockConfig.name || tempBlockConfig.label} onChange={(e) => handleTempUpdate({ name: e.target.value })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide" />
+                        <input type="text" value={controlledValue(tempBlockConfig.name ?? tempBlockConfig.label, '')} onChange={(e) => handleTempUpdate({ name: e.target.value })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide" />
                     </div>
 
                     <div className="flex flex-col gap-1">
                         <label className="text-xs opacity-70 uppercase tracking-widest">字节长度 (Length)</label>
-                        <input type="number" min="0" value={tempBlockConfig.byte_len || tempBlockConfig.byte_length} onChange={e => handleTempUpdate({ byte_len: parseInt(e.target.value) || 0 })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono" />
+                        <input type="number" min="0" value={controlledValue(tempBlockConfig.byte_len ?? tempBlockConfig.byte_length, 0)} onChange={e => handleTempUpdate({ byte_len: parseInt(e.target.value) || 0 })} className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono" />
                     </div>
 
                     {/* Dynamic Params */}
@@ -290,7 +292,7 @@ export default function BlockPropertiesPanel({
                         <div className="p-3 border border-dashed border-nier-light/50 space-y-3">
                             <div className="text-[9px] opacity-100 font-bold text-nier-light">重复策略 (REPEAT)</div>
                             <select
-                                value={tempBlockConfig.repeat_type || 'NONE'}
+                                value={controlledValue(tempBlockConfig.repeat_type, 'NONE')}
                                 onChange={e => handleTempUpdate({ repeat_type: e.target.value })}
                                 className="w-full bg-nier-dark border border-nier-light/50 text-nier-light text-xs p-1 focus:outline-none"
                             >
@@ -302,7 +304,7 @@ export default function BlockPropertiesPanel({
                             {tempBlockConfig.repeat_type === 'FIXED' && (
                                 <div className="flex flex-col gap-1">
                                     <label className="text-[9px]">次数 (COUNT)</label>
-                                    <input type="number" value={tempBlockConfig.repeat_count || 1} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
+                                    <input type="number" value={controlledValue(tempBlockConfig.repeat_count, 1)} onChange={e => handleTempUpdate({ repeat_count: parseInt(e.target.value) })} className="bg-transparent border-b border-white/30 text-xs" />
                                 </div>
                             )}
                             {tempBlockConfig.repeat_type === 'DYNAMIC' && (

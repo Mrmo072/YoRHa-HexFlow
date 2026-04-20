@@ -45,4 +45,4 @@ class FrameRequest(BaseModel):
 class CompileResponse(BaseModel):
     hex_string: str
     total_length: int
-    debug_info: List[str] = []
+    debug_info: List[str] = Field(default_factory=list)

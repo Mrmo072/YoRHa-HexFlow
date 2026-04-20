@@ -10,7 +10,7 @@ import { useInstructionData } from '../hooks/useInstructionData';
 import { useInstructionLanes } from '../hooks/useInstructionLanes';
 import { useSelectionSystem } from '../hooks/useSelectionSystem';
 
-export default function Instruction({ onWebUpdate }) {
+export default function Instruction({ instructions: initialInstructions, setInstructions: setSharedInstructions, onWebUpdate }) {
     // 1. Data Hook
     const {
         instructions,
@@ -18,9 +18,12 @@ export default function Instruction({ onWebUpdate }) {
         setActiveInstructionId,
         currentInstruction,
         operatorTemplates,
+        isOperatorTemplatesLoading,
+        operatorTemplatesError,
         statusMsg,
         hasUnsavedChanges,
         loadInstructions,
+        loadOperatorTemplates,
         updateLocalInstruction,
         addInstruction,
         deleteInstruction,
@@ -28,7 +31,11 @@ export default function Instruction({ onWebUpdate }) {
         revertChanges,
         setInstructions, // exposed for functional updates
         setHasUnsavedChanges
-    } = useInstructionData(onWebUpdate);
+    } = useInstructionData({
+        instructions: initialInstructions,
+        setInstructions: setSharedInstructions,
+        onWebUpdate
+    });
 
     // 2. Selection Hook
     const {
@@ -233,7 +240,14 @@ export default function Instruction({ onWebUpdate }) {
                 onDelete={(e, id) => deleteInstruction(id, openConfirm)}
                 hasUnsavedChanges={hasUnsavedChanges}
             />
-            <ComponentPalette operatorTemplates={operatorTemplates} onAddBlock={handleAddBlock} />
+            <ComponentPalette
+                operatorTemplates={operatorTemplates}
+                onAddBlock={handleAddBlock}
+                isLoading={isOperatorTemplatesLoading}
+                error={operatorTemplatesError}
+                hasInstruction={Boolean(currentInstruction)}
+                onRetry={loadOperatorTemplates}
+            />
             <section className="flex-1 relative bg-[url('/grid.png')] bg-repeat opacity-90 overflow-hidden flex flex-col canvas-bg" onClick={handleCanvasClick}>
                 <div className="h-10 border-b border-nier-light bg-nier-dark/90 flex items-center justify-between px-4 gap-2 text-xs font-mono opacity-50">
                     <div className="flex items-center gap-2 cursor-pointer hover:text-nier-light" onClick={() => setSelectedId(null)}>

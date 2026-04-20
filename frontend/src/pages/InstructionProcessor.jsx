@@ -4,7 +4,7 @@ import InstructionRunner from '../components/InstructionForm/InstructionRunner';
 import { useInstructionData } from '../hooks/useInstructionData';
 import NieRDatePicker from '../components/NieRDatePicker';
 
-export default function InstructionProcessor() {
+export default function InstructionProcessor({ instructions: initialInstructions, setInstructions: setSharedInstructions }) {
     // We rely solely on the hook to fetch from DB, matching the Management page behavior
     const {
         instructions,
@@ -12,7 +12,10 @@ export default function InstructionProcessor() {
         setActiveInstructionId,
         currentInstruction,
         loadInstructions
-    } = useInstructionData();
+    } = useInstructionData({
+        instructions: initialInstructions,
+        setInstructions: setSharedInstructions
+    });
 
     const [searchTerm, setSearchTerm] = useState('');
     const [datePickerState, setDatePickerState] = useState({ isOpen: false, value: null, onConfirmCallback: null });

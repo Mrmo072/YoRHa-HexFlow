@@ -16,8 +16,8 @@ vi.mock('../../api', () => ({
 
 describe('useInstructionData', () => {
     const mockInstructions = [
-        { id: 'inst-1', name: 'Test 1', fields: [] },
-        { id: 'inst-2', name: 'Test 2', fields: [] }
+        { id: 'inst-1', device_code: 'DEV-001', code: 'CMD-001', name: 'Test 1', type: 'STATIC', fields: [] },
+        { id: 'inst-2', device_code: 'DEV-002', code: 'CMD-002', name: 'Test 2', type: 'STATIC', fields: [] }
     ];
     const mockTemplates = [
         { op_code: 'HEX_RAW', label: 'Hex' }
@@ -55,6 +55,22 @@ describe('useInstructionData', () => {
         });
 
         expect(result.current.statusMsg).toContain('离线模式');
+    });
+
+    it('should keep instructions available when operator templates fail to load', async () => {
+        api.getOperatorTemplates.mockRejectedValue(new Error('Template Error'));
+
+        const { result } = renderHook(() => useInstructionData());
+
+        await waitFor(() => {
+            expect(result.current.isLoading).toBe(false);
+            expect(result.current.isOperatorTemplatesLoading).toBe(false);
+        });
+
+        expect(result.current.instructions).toHaveLength(2);
+        expect(result.current.activeInstructionId).toBe('inst-1');
+        expect(result.current.operatorTemplates).toEqual({});
+        expect(result.current.operatorTemplatesError).toBe('模块模板加载失败');
     });
 
     it('should add new instruction', async () => {
@@ -115,7 +131,13 @@ describe('useInstructionData', () => {
         });
 
         // Should call API with ID and Payload
-        expect(api.updateInstruction).toHaveBeenCalledWith('inst-1', expect.objectContaining({ id: 'inst-1' }));
+        expect(api.updateInstruction).toHaveBeenCalledWith('inst-1', expect.objectContaining({
+            device_code: 'DEV-001',
+            code: 'CMD-001',
+            name: 'Test 1',
+            type: 'STATIC',
+            fields: []
+        }));
         expect(result.current.hasUnsavedChanges).toBe(false);
         expect(result.current.statusMsg).toBe('已保存');
     });
@@ -153,7 +175,7 @@ describe('useInstructionData', () => {
             result.current.setActiveInstructionId('inst-2');
         });
 
-        api.getInstructions.mockResolvedValueOnce([{ id: 'inst-1', name: 'Test 1', fields: [] }]);
+        api.getInstructions.mockResolvedValueOnce([{ id: 'inst-1', device_code: 'DEV-001', code: 'CMD-001', name: 'Test 1', type: 'STATIC', fields: [] }]);
 
         await act(async () => {
             await result.current.loadInstructions('inst-1');

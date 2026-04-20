@@ -40,14 +40,9 @@ export function useInstructionLanes(currentInstruction, activeInstructionId) {
 
     // Reset Group Path when switching instructions & Default Expand All
     useEffect(() => {
-        setExpandedGroupIds(prev => {
-            if (prev.length === groupIds.length && prev.every((id, index) => id === groupIds[index])) {
-                return prev;
-            }
-            return groupIds;
-        });
-        setFocusedParentId(prev => (prev === null ? prev : null));
-    }, [activeInstructionId, groupIds]); // Depend on ID change to reset
+        setExpandedGroupIds(groupIds);
+        setFocusedParentId(null);
+    }, [activeInstructionId]); // Reset only when switching instruction
 
     // Compute Lanes for Canvas (Recursive Tree)
     const uiLanes = useMemo(() => {

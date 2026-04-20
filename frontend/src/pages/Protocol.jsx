@@ -10,6 +10,8 @@ export default function Protocol({ protocols, setProtocols }) {
     // Protocol List State - LIFTED to App.jsx
     const [activeProtocolId, setActiveProtocolId] = useState(protocols[0]?.id || null);
     const [statusMsg, setStatusMsg] = useState('');
+    const saveTimerRef = React.useRef(null);
+    const lastSavedSignatureRef = React.useRef('');
 
     // Update active ID if current is deleted/missing
     React.useEffect(() => {
@@ -20,8 +22,30 @@ export default function Protocol({ protocols, setProtocols }) {
         }
     }, [protocols, activeProtocolId]);
 
+    React.useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+        };
+    }, []);
+
     // Derived State
     const currentProtocol = protocols.find(p => p.id === activeProtocolId) || protocols[0];
+
+    React.useEffect(() => {
+        if (!currentProtocol) {
+            lastSavedSignatureRef.current = '';
+            return;
+        }
+
+        lastSavedSignatureRef.current = JSON.stringify({
+            label: currentProtocol.label,
+            type: currentProtocol.type,
+            description: currentProtocol.description || null,
+            children: currentProtocol.children || []
+        });
+    }, [currentProtocol]);
 
     // Navigation Path (Stack of Block IDs)
     const [path, setPath] = useState(currentProtocol ? [currentProtocol] : []);
@@ -58,7 +82,18 @@ export default function Protocol({ protocols, setProtocols }) {
     const [selectedId, setSelectedId] = useState(null);
 
     // CRUD Handlers for Protocols
-    const saveProtocol = async (nextProtocol) => {
+    const saveProtocol = React.useCallback(async (nextProtocol) => {
+        const nextSignature = JSON.stringify({
+            label: nextProtocol.label,
+            type: nextProtocol.type,
+            description: nextProtocol.description || null,
+            children: nextProtocol.children || []
+        });
+
+        if (lastSavedSignatureRef.current === nextSignature) {
+            return nextProtocol;
+        }
+
         try {
             setStatusMsg('保存中...');
             const saved = await api.updateProtocol(nextProtocol.id, {
@@ -67,6 +102,7 @@ export default function Protocol({ protocols, setProtocols }) {
                 description: nextProtocol.description || null,
                 children: nextProtocol.children || []
             });
+            lastSavedSignatureRef.current = nextSignature;
             setProtocols(prev => prev.map(protocol => protocol.id === saved.id ? saved : protocol));
             setStatusMsg('协议已保存');
             setTimeout(() => setStatusMsg(''), 1200);
@@ -76,7 +112,18 @@ export default function Protocol({ protocols, setProtocols }) {
             setStatusMsg('协议保存失败');
             throw error;
         }
-    };
+    }, [setProtocols]);
+
+    const scheduleProtocolSave = React.useCallback((nextProtocol) => {
+        if (saveTimerRef.current) {
+            clearTimeout(saveTimerRef.current);
+        }
+
+        setStatusMsg('待保存...');
+        saveTimerRef.current = setTimeout(() => {
+            saveProtocol(nextProtocol);
+        }, 350);
+    }, [saveProtocol]);
 
     const handleAddProtocol = async () => {
         const newProto = {
@@ -88,7 +135,7 @@ export default function Protocol({ protocols, setProtocols }) {
         try {
             setStatusMsg('创建协议...');
             const created = await api.createProtocol(newProto);
-            setProtocols([...protocols, created]);
+            setProtocols(prev => [...prev, created]);
             setActiveProtocolId(created.id);
             setStatusMsg('协议已创建');
             setTimeout(() => setStatusMsg(''), 1200);
@@ -133,8 +180,8 @@ export default function Protocol({ protocols, setProtocols }) {
         const newRoot = updateRecursive(currentProtocol);
 
         // Update protocol list
-        setProtocols(protocols.map(p => p.id === activeProtocolId ? newRoot : p));
-        saveProtocol(newRoot);
+        setProtocols(prev => prev.map(p => p.id === activeProtocolId ? newRoot : p));
+        scheduleProtocolSave(newRoot);
 
         // Path does not need update because we look up activeContainerNode dynamically
     };
@@ -278,8 +325,8 @@ export default function Protocol({ protocols, setProtocols }) {
                                 value={currentProtocol.label}
                                 onChange={(e) => {
                                     const updatedProto = { ...currentProtocol, label: e.target.value };
-                                    setProtocols(protocols.map(p => p.id === activeProtocolId ? updatedProto : p));
-                                    saveProtocol(updatedProto);
+                                    setProtocols(prev => prev.map(p => p.id === activeProtocolId ? updatedProto : p));
+                                    scheduleProtocolSave(updatedProto);
                                 }}
                                 className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide"
                             />

@@ -1,17 +1,68 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../api';
 
-export function useInstructionData(onWebUpdate) {
-    const [instructions, setInstructions] = useState([]);
+const normalizeFieldPayload = (field, fallbackSequence = 0) => ({
+    id: field.id,
+    parent_id: field.parent_id || null,
+    sequence: Number.isFinite(field.sequence) ? field.sequence : fallbackSequence,
+    name: String(field.name || field.label || field.op_code || 'UNNAMED'),
+    op_code: String(field.op_code || 'HEX_RAW'),
+    byte_len: Number.isFinite(field.byte_len) ? field.byte_len : (Number.isFinite(field.byte_length) ? field.byte_length : 0),
+    endianness: field.endianness === 'LITTLE' ? 'LITTLE' : 'BIG',
+    repeat_type: ['NONE', 'FIXED', 'DYNAMIC'].includes(field.repeat_type) ? field.repeat_type : 'NONE',
+    repeat_ref_id: field.repeat_ref_id || null,
+    repeat_count: Number.isFinite(field.repeat_count) ? field.repeat_count : 1,
+    parameter_config: field.parameter_config && typeof field.parameter_config === 'object'
+        ? Object.fromEntries(
+            Object.entries(field.parameter_config).filter(([, value]) => value !== undefined)
+        )
+        : {},
+    children: []
+});
+
+const normalizeInstructionPayload = (instruction) => ({
+    device_code: String(instruction.device_code || '').trim(),
+    code: String(instruction.code || '').trim(),
+    name: String(instruction.name || instruction.label || '').trim(),
+    description: instruction.description ?? null,
+    type: ['STATIC', 'DYNAMIC'].includes(instruction.type) ? instruction.type : 'STATIC',
+    fields: Array.isArray(instruction.fields)
+        ? instruction.fields.map((field, index) => normalizeFieldPayload(field, index))
+        : []
+});
+
+export function useInstructionData(options = {}) {
+    const normalizedOptions = typeof options === 'function'
+        ? { onWebUpdate: options }
+        : (options || {});
+    const {
+        instructions: externalInstructions,
+        setInstructions: setExternalInstructions,
+        onWebUpdate
+    } = normalizedOptions;
+    const [internalInstructions, setInternalInstructions] = useState(externalInstructions || []);
     const [activeInstructionId, setActiveInstructionId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isOperatorTemplatesLoading, setIsOperatorTemplatesLoading] = useState(false);
     const [statusMsg, setStatusMsg] = useState('');
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [operatorTemplates, setOperatorTemplates] = useState({});
+    const [operatorTemplatesError, setOperatorTemplatesError] = useState('');
     const isMountedRef = useRef(true);
     const instructionsRef = useRef([]);
     const activeInstructionIdRef = useRef(null);
     const statusTimerRef = useRef(null);
+    const instructionRequestIdRef = useRef(0);
+    const operatorTemplatesRequestIdRef = useRef(0);
+    const instructions = externalInstructions ?? internalInstructions;
+
+    const setInstructionsState = useCallback((nextValue) => {
+        if (setExternalInstructions) {
+            setExternalInstructions(nextValue);
+            return;
+        }
+        setInternalInstructions(nextValue);
+    }, [setExternalInstructions]);
 
     // Computed property for easy access
     const currentInstruction = useMemo(
@@ -28,6 +79,12 @@ export function useInstructionData(onWebUpdate) {
     }, [instructions]);
 
     useEffect(() => {
+        if (!externalInstructions) return;
+        instructionsRef.current = externalInstructions;
+    }, [externalInstructions]);
+
+    useEffect(() => {
+        isMountedRef.current = true;
         return () => {
             isMountedRef.current = false;
             if (statusTimerRef.current) {
@@ -63,58 +120,99 @@ export function useInstructionData(onWebUpdate) {
         return nextActiveId;
     }, []);
 
-    const loadData = useCallback(async () => {
-        setIsLoading(true);
+    useEffect(() => {
+        if (instructions.length === 0) {
+            if (activeInstructionIdRef.current !== null) {
+                setActiveInstructionId(null);
+            }
+            return;
+        }
+
+        if (!instructions.some(i => i.id === activeInstructionIdRef.current)) {
+            reconcileActiveInstruction(instructions);
+        }
+    }, [instructions, reconcileActiveInstruction]);
+
+    const loadOperatorTemplates = useCallback(async () => {
+        const requestId = ++operatorTemplatesRequestIdRef.current;
+        setIsOperatorTemplatesLoading(true);
+        setOperatorTemplatesError('');
         try {
-            const [instData, opData] = await Promise.all([
-                api.getInstructions(),
-                api.getOperatorTemplates()
-            ]);
-            if (!isMountedRef.current) return;
-            setInstructions(instData);
+            const opData = await api.getOperatorTemplates();
+            if (!isMountedRef.current || requestId !== operatorTemplatesRequestIdRef.current) return;
 
             const opMap = {};
-            opData.forEach(op => opMap[op.op_code] = op);
+            opData.forEach(op => {
+                opMap[op.op_code] = op;
+            });
+
             setOperatorTemplates(opMap);
-            reconcileActiveInstruction(instData);
-            if (onWebUpdate) onWebUpdate(instData);
         } catch (err) {
-            console.error("Failed to load data", err);
-            showStatus('离线模式 / 数据库错误');
+            console.error('Failed to load operator templates', err);
+            if (!isMountedRef.current || requestId !== operatorTemplatesRequestIdRef.current) return;
+            setOperatorTemplates({});
+            setOperatorTemplatesError('模块模板加载失败');
         } finally {
-            if (isMountedRef.current) {
+            if (isMountedRef.current && requestId === operatorTemplatesRequestIdRef.current) {
+                setIsOperatorTemplatesLoading(false);
+            }
+        }
+    }, []);
+
+    const loadData = useCallback(async () => {
+        const requestId = ++instructionRequestIdRef.current;
+        setIsLoading(true);
+        try {
+            const instData = await api.getInstructions();
+            if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
+            setInstructionsState(instData);
+            reconcileActiveInstruction(instData);
+            if (!setExternalInstructions && onWebUpdate) onWebUpdate(instData);
+        } catch (err) {
+            console.error('Failed to load instructions', err);
+            if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
+            showStatus('离线模式 / 指令数据错误');
+        } finally {
+            if (isMountedRef.current && requestId === instructionRequestIdRef.current) {
                 setIsLoading(false);
             }
         }
-    }, [onWebUpdate, reconcileActiveInstruction, showStatus]);
+    }, [onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
 
     // Load Initial Data
     useEffect(() => {
         loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        loadOperatorTemplates();
+    }, [loadOperatorTemplates]);
+
     const loadInstructions = useCallback(async (search = '') => {
+        const requestId = ++instructionRequestIdRef.current;
         setIsLoading(true);
         try {
             const data = await api.getInstructions(search);
-            if (!isMountedRef.current) return;
-            setInstructions(data);
+            if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
+            setInstructionsState(data);
             reconcileActiveInstruction(data);
             setHasUnsavedChanges(false);
+            if (!setExternalInstructions && onWebUpdate) onWebUpdate(data);
         } catch (err) {
+            if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
             console.error(err);
             showStatus('指令列表加载失败');
         } finally {
-            if (isMountedRef.current) {
+            if (isMountedRef.current && requestId === instructionRequestIdRef.current) {
                 setIsLoading(false);
             }
         }
-    }, [reconcileActiveInstruction, showStatus]);
+    }, [onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
 
     const updateLocalInstruction = useCallback((updatedInst) => {
-        setInstructions(prev => prev.map(i => i.id === updatedInst.id ? updatedInst : i));
+        setInstructionsState(prev => prev.map(i => i.id === updatedInst.id ? updatedInst : i));
         setHasUnsavedChanges(true);
-    }, []);
+    }, [setInstructionsState]);
 
     // CRUD ACTIONS
     const addInstruction = async (openConfirmCallback) => {
@@ -129,9 +227,10 @@ export function useInstructionData(onWebUpdate) {
             try {
                 const created = await api.createInstruction(newInstPayload);
                 if (!isMountedRef.current) return;
-                setInstructions(prev => [...prev, created]);
+                setInstructionsState(prev => [...prev, created]);
                 setActiveInstructionId(created.id);
                 setHasUnsavedChanges(false);
+                showStatus('已新增指令', 1000);
             } catch (e) {
                 if (e.response && e.response.status === 400) {
                     showStatus(e.response.data.detail);
@@ -152,9 +251,10 @@ export function useInstructionData(onWebUpdate) {
                 await api.deleteInstruction(id);
                 if (!isMountedRef.current) return;
                 const rem = instructionsRef.current.filter(i => i.id !== id);
-                setInstructions(rem);
+                setInstructionsState(rem);
                 reconcileActiveInstruction(rem, activeInstructionIdRef.current === id ? null : activeInstructionIdRef.current);
                 setHasUnsavedChanges(false);
+                showStatus('已删除指令', 1000);
             } catch (e) { }
         };
 
@@ -167,17 +267,24 @@ export function useInstructionData(onWebUpdate) {
 
     const saveChanges = async (openConfirmCallback) => {
         if (!currentInstruction) return;
+        const payload = normalizeInstructionPayload(currentInstruction);
+
+        if (!payload.device_code || !payload.code || !payload.name) {
+            showStatus('保存失败：设备前缀、指令代号、指令名称不能为空');
+            return;
+        }
+
         try {
             showStatus('保存中...');
-            await api.updateInstruction(currentInstruction.id, currentInstruction);
+            await api.updateInstruction(currentInstruction.id, payload);
             showStatus('已保存', 1000);
             setHasUnsavedChanges(false);
-            if (onWebUpdate) onWebUpdate(instructions);
+            if (!setExternalInstructions && onWebUpdate) onWebUpdate(instructions);
         } catch (e) {
             console.error(e);
-            if (e.response && e.response.status === 400 && openConfirmCallback) {
-                showStatus(e.response.data.detail);
-                openConfirmCallback(`保存失败：\n${e.response.data.detail}`, () => { });
+            if (e.response && (e.response.status === 400 || e.response.status === 422) && openConfirmCallback) {
+                showStatus(e.message);
+                openConfirmCallback(`保存失败：\n${e.message}`, () => { });
             } else {
                 showStatus('保存失败');
             }
@@ -198,14 +305,17 @@ export function useInstructionData(onWebUpdate) {
         setActiveInstructionId,
         currentInstruction,
         operatorTemplates,
+        isOperatorTemplatesLoading,
+        operatorTemplatesError,
         isLoading,
         statusMsg,
         setStatusMsg,
         hasUnsavedChanges,
         setHasUnsavedChanges,
-        setInstructions, // For functional updates like block deletion
+        setInstructions: setInstructionsState, // For functional updates like block deletion
         loadData,
         loadInstructions,
+        loadOperatorTemplates,
         updateLocalInstruction,
         addInstruction,
         deleteInstruction,

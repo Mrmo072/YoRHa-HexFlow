@@ -1,6 +1,16 @@
 import React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
+const toControlledScalar = (value, fallback = '') => {
+    if (Array.isArray(value)) {
+        return value.length > 0 ? String(value[0]) : fallback;
+    }
+    if (value === undefined || value === null) {
+        return fallback;
+    }
+    return String(value);
+};
+
 export default function ParamConfigForm({
     blockState,
     instructionFields,
@@ -91,11 +101,15 @@ export default function ParamConfigForm({
 
         // 1. Enum / Array Select
         if (Array.isArray(configType)) {
+            const selectValue = Array.isArray(val)
+                ? (val[0] ?? configType[0])
+                : (val ?? configType[0] ?? '');
+
             return (
                 <div key={key} className="flex flex-col gap-1">
                     <label className="text-[10px] opacity-70 uppercase tracking-widest">{key}</label>
                     <select
-                        value={val || configType[0]}
+                        value={toControlledScalar(selectValue, '')}
                         onChange={(e) => {
                             const raw = e.target.value;
                             // Smart parse: if it looks like a number, parse it
@@ -328,7 +342,7 @@ export default function ParamConfigForm({
                 <input
                     type={configType === 'number' ? 'number' : 'text'}
                     step={configType === 'number' ? 'any' : undefined}
-                    value={val !== undefined ? val : ''}
+                    value={toControlledScalar(val, '')}
                     onChange={(e) => {
                         let v = e.target.value;
                         if (configType === 'number') v = parseFloat(v);
