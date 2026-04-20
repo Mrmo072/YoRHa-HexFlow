@@ -34,6 +34,14 @@
   - 核心 Hooks 测试覆盖率 100%。
   - 包含防崩溃的冒烟测试 (Smoke Tests)。
 
+## 📌 当前页面实现状态
+
+页面导航、占位说明和实现状态现在统一以 `frontend/src/config/pageStatus.json` 为单一来源。
+
+- 当前页面状态总览请查看: [docs/PAGE_STATUS.md](./docs/PAGE_STATUS.md)
+- 其中 `协议定义`、`指令管理`、`指令加工`、`编排绑定` 已接入当前 SQLite / FastAPI 主链路。
+- `通讯调试` 与 `数据中心` 仍为占位页，文档与页面说明已按同一份状态清单对齐。
+
 ---
 
 ## 🚀 快速启动 (Quick Start)

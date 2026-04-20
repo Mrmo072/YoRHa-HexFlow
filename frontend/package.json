@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "sync:page-status": "node ../scripts/generate-page-status.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

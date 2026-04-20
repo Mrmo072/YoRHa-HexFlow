@@ -2,6 +2,8 @@
 
 ## 1. 核心业务逻辑流程 (Core Business Workflow)
 
+> 页面导航与实现状态请以 `frontend/src/config/pageStatus.json` 和生成文档 `docs/PAGE_STATUS.md` 为准，避免与页面实现状态漂移。
+
 ### 1.1 数据加载与初始化
 1. **Load**: 用户访问页面，`useInstructionData` 挂载。
 2. **Fetch**: 调用后端 API 获取指令列表。

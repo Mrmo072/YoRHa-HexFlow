@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Canvas from '../components/Canvas';
 import { v4 as uuidv4 } from 'uuid';
 import NieRModal from '../components/NieRModal';
@@ -10,7 +10,7 @@ import { useInstructionData } from '../hooks/useInstructionData';
 import { useInstructionLanes } from '../hooks/useInstructionLanes';
 import { useSelectionSystem } from '../hooks/useSelectionSystem';
 
-export default function Instruction({ instructions: initialInstructions, setInstructions: setSharedInstructions, onWebUpdate }) {
+export default function Instruction({ instructions: initialInstructions, setInstructions: setSharedInstructions, onWebUpdate, reloadInstructions }) {
     // 1. Data Hook
     const {
         instructions,
@@ -34,7 +34,9 @@ export default function Instruction({ instructions: initialInstructions, setInst
     } = useInstructionData({
         instructions: initialInstructions,
         setInstructions: setSharedInstructions,
-        onWebUpdate
+        onWebUpdate,
+        fetchInstructions: reloadInstructions,
+        disableInitialLoad: true
     });
 
     // 2. Selection Hook
@@ -73,6 +75,16 @@ export default function Instruction({ instructions: initialInstructions, setInst
     // --- Derived State Helpers ---
     const flattenedProcessed = processedLanes.flatMap(l => l.items);
     const selectedBlock = flattenedProcessed.find(b => b.id === selectedId);
+    const visibleInstructions = useMemo(() => {
+        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return instructions;
+
+        return instructions.filter(instruction => (
+            `${instruction.name || instruction.label || ''} ${instruction.code || ''} ${instruction.device_code || ''}`
+                .toLowerCase()
+                .includes(keyword)
+        ));
+    }, [instructions, searchTerm]);
 
     // --- Actions ---
     // Helper: Ensure Unique Name
@@ -230,11 +242,11 @@ export default function Instruction({ instructions: initialInstructions, setInst
                 </div>
             )}
             <InstructionListSidebar
-                instructions={instructions}
+                instructions={visibleInstructions}
                 activeInstructionId={activeInstructionId}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
-                onSearch={loadInstructions}
+                onSearch={null}
                 onSelect={handleSelectInstWrapper}
                 onAdd={() => addInstruction(openConfirm)}
                 onDelete={(e, id) => deleteInstruction(id, openConfirm)}

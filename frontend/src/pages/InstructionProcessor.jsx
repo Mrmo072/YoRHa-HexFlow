@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import InstructionListSidebar from '../components/InstructionListSidebar';
 import InstructionRunner from '../components/InstructionForm/InstructionRunner';
 import { useInstructionData } from '../hooks/useInstructionData';
 import NieRDatePicker from '../components/NieRDatePicker';
 
-export default function InstructionProcessor({ instructions: initialInstructions, setInstructions: setSharedInstructions }) {
-    // We rely solely on the hook to fetch from DB, matching the Management page behavior
+export default function InstructionProcessor({ instructions: initialInstructions, setInstructions: setSharedInstructions, reloadInstructions }) {
     const {
         instructions,
         activeInstructionId,
@@ -14,11 +13,23 @@ export default function InstructionProcessor({ instructions: initialInstructions
         loadInstructions
     } = useInstructionData({
         instructions: initialInstructions,
-        setInstructions: setSharedInstructions
+        setInstructions: setSharedInstructions,
+        fetchInstructions: reloadInstructions,
+        disableInitialLoad: true
     });
 
     const [searchTerm, setSearchTerm] = useState('');
     const [datePickerState, setDatePickerState] = useState({ isOpen: false, value: null, onConfirmCallback: null });
+    const visibleInstructions = useMemo(() => {
+        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return instructions;
+
+        return instructions.filter(instruction => (
+            `${instruction.name || instruction.label || ''} ${instruction.code || ''} ${instruction.device_code || ''}`
+                .toLowerCase()
+                .includes(keyword)
+        ));
+    }, [instructions, searchTerm]);
 
     // Handle "Send" action (mock for now, or real API call)
     const handleSend = async (payload) => {
@@ -30,11 +41,11 @@ export default function InstructionProcessor({ instructions: initialInstructions
     return (
         <div className="flex-1 flex overflow-hidden relative">
             <InstructionListSidebar
-                instructions={instructions}
+                instructions={visibleInstructions}
                 activeInstructionId={activeInstructionId}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
-                onSearch={loadInstructions}
+                onSearch={searchTerm.trim() ? null : loadInstructions}
                 onSelect={setActiveInstructionId}
                 // We pass no-op for Add/Delete to make it "Read Only" or just hide buttons via CSS if we wanted to be stricter.
                 // But passing empty functions prevents crashes if clicked.

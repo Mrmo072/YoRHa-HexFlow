@@ -34,6 +34,14 @@
   - 100% test coverage for core hooks.
   - Includes smoke tests to prevent crashes.
 
+## 📌 Current Page Status
+
+Page navigation labels, placeholder descriptions, and implementation status now use `frontend/src/config/pageStatus.json` as the single source of truth.
+
+- See the current page matrix in [docs/PAGE_STATUS.md](./docs/PAGE_STATUS.md)
+- `Protocol Definition`, `Instruction Management`, `Instruction Processing`, and `Orchestration Binding` are connected to the current SQLite / FastAPI main flow.
+- `Communication Terminal` and `Data Hub` are still placeholder pages, and the documentation now reflects that explicitly.
+
 ---
 
 ## 🚀 Quick Start

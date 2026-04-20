@@ -1,10 +1,19 @@
 import React from 'react';
+import FeaturePlaceholder from '../components/FeaturePlaceholder';
+import { PAGE_STATUS_BY_KEY } from '../config/pageRegistry';
 
 export default function DataHub() {
+    const page = PAGE_STATUS_BY_KEY.datahub;
+
     return (
-        <div className="flex-1 flex items-center justify-center text-nier-light opacity-50 font-mono tracking-widest flex-col gap-4">
-            <div className="text-6xl font-bold">PAGE E: DATA HUB</div>
-            <div className="text-xl">Import/Export & Configuration [V3.0]</div>
-        </div>
+        <FeaturePlaceholder
+            code={`PAGE ${page.shortcut} // DATA HUB`}
+            title={page.titleZh}
+            subtitle={page.titleEn}
+            status={page.status}
+            description={page.summary}
+            availableNow={page.availableNow}
+            nextSteps={page.nextSteps}
+        />
     );
 }

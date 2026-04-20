@@ -183,4 +183,24 @@ describe('useInstructionData', () => {
 
         expect(result.current.activeInstructionId).toBe('inst-1');
     });
+
+    it('should not auto-fetch instructions when shared ownership disables initial load', async () => {
+        const fetchInstructions = vi.fn().mockResolvedValue(mockInstructions);
+
+        const { result } = renderHook(() => useInstructionData({
+            instructions: mockInstructions,
+            setInstructions: vi.fn(),
+            fetchInstructions,
+            disableInitialLoad: true
+        }));
+
+        await waitFor(() => {
+            expect(result.current.isOperatorTemplatesLoading).toBe(false);
+        });
+
+        expect(api.getInstructions).not.toHaveBeenCalled();
+        expect(fetchInstructions).not.toHaveBeenCalled();
+        expect(result.current.instructions).toEqual(mockInstructions);
+        expect(result.current.activeInstructionId).toBe('inst-1');
+    });
 });

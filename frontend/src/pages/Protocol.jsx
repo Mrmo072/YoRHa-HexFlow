@@ -1,20 +1,37 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Canvas from '../components/Canvas';
 import { v4 as uuidv4 } from 'uuid';
 import { api } from '../api';
 
-// Mock Initial Data (Recursive)
+const serializeProtocol = (protocol) => JSON.stringify({
+    label: protocol?.label || '',
+    type: protocol?.type || 'container',
+    description: protocol?.description || null,
+    children: protocol?.children || []
+});
 
+const findNode = (root, id) => {
+    if (!root || !id) return null;
+    if (root.id === id) return root;
+    if (!root.children) return null;
+
+    for (const child of root.children) {
+        const found = findNode(child, id);
+        if (found) return found;
+    }
+
+    return null;
+};
 
 export default function Protocol({ protocols, setProtocols }) {
-    // Protocol List State - LIFTED to App.jsx
     const [activeProtocolId, setActiveProtocolId] = useState(protocols[0]?.id || null);
     const [statusMsg, setStatusMsg] = useState('');
-    const saveTimerRef = React.useRef(null);
-    const lastSavedSignatureRef = React.useRef('');
+    const [selectedId, setSelectedId] = useState(null);
+    const saveTimerRef = useRef(null);
+    const statusTimerRef = useRef(null);
+    const lastPersistedSignatureRef = useRef('');
 
-    // Update active ID if current is deleted/missing
-    React.useEffect(() => {
+    useEffect(() => {
         if (!activeProtocolId && protocols.length > 0) {
             setActiveProtocolId(protocols[0].id);
         } else if (!protocols.find(p => p.id === activeProtocolId) && protocols.length > 0) {
@@ -22,56 +39,55 @@ export default function Protocol({ protocols, setProtocols }) {
         }
     }, [protocols, activeProtocolId]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         return () => {
             if (saveTimerRef.current) {
                 clearTimeout(saveTimerRef.current);
             }
+            if (statusTimerRef.current) {
+                clearTimeout(statusTimerRef.current);
+            }
         };
     }, []);
 
-    // Derived State
-    const currentProtocol = protocols.find(p => p.id === activeProtocolId) || protocols[0];
+    const showStatus = useCallback((message, durationMs = 0) => {
+        if (statusTimerRef.current) {
+            clearTimeout(statusTimerRef.current);
+            statusTimerRef.current = null;
+        }
 
-    React.useEffect(() => {
+        setStatusMsg(message);
+
+        if (durationMs > 0) {
+            statusTimerRef.current = setTimeout(() => {
+                setStatusMsg('');
+            }, durationMs);
+        }
+    }, []);
+
+    const currentProtocol = protocols.find(p => p.id === activeProtocolId) || protocols[0] || null;
+    const [pathIds, setPathIds] = useState(currentProtocol ? [currentProtocol.id] : []);
+
+    useEffect(() => {
         if (!currentProtocol) {
-            lastSavedSignatureRef.current = '';
+            setPathIds([]);
+            setSelectedId(null);
+            lastPersistedSignatureRef.current = '';
             return;
         }
 
-        lastSavedSignatureRef.current = JSON.stringify({
-            label: currentProtocol.label,
-            type: currentProtocol.type,
-            description: currentProtocol.description || null,
-            children: currentProtocol.children || []
-        });
-    }, [currentProtocol]);
+        setPathIds([currentProtocol.id]);
+        setSelectedId(null);
+        lastPersistedSignatureRef.current = serializeProtocol(currentProtocol);
+    }, [activeProtocolId, currentProtocol?.id]);
 
-    // Navigation Path (Stack of Block IDs)
-    const [path, setPath] = useState(currentProtocol ? [currentProtocol] : []);
-
-    // reset path when protocol changes
-    React.useEffect(() => {
-        setPath(currentProtocol ? [currentProtocol] : []);
-    }, [activeProtocolId, currentProtocol]);
-
-    // Find current container in the LATEST currentProtocol tree to ensure we edit fresh state
-    // (The path state might hold stale references, we need to find the equivalent node in currentProtocol)
-
-    // Helper to find node by ID in a tree
-    const findNode = (root, id) => {
-        if (root.id === id) return root;
-        if (!root.children) return null;
-        for (const child of root.children) {
-            const found = findNode(child, id);
-            if (found) return found;
-        }
-        return null;
-    };
-
-    const activePathNode = path[path.length - 1];
-    const activeContainerNode = currentProtocol && activePathNode ? (findNode(currentProtocol, activePathNode.id) || currentProtocol) : currentProtocol;
+    const activeContainerNode = currentProtocol
+        ? (findNode(currentProtocol, pathIds[pathIds.length - 1]) || currentProtocol)
+        : null;
     const currentBlocks = activeContainerNode?.children || [];
+    const pathNodes = pathIds
+        .map((id) => findNode(currentProtocol, id))
+        .filter(Boolean);
     const currentLanes = useMemo(() => [{
         depth: 0,
         parentId: null,
@@ -79,51 +95,52 @@ export default function Protocol({ protocols, setProtocols }) {
         items: currentBlocks
     }], [activeContainerNode, currentBlocks]);
 
-    const [selectedId, setSelectedId] = useState(null);
+    useEffect(() => {
+        if (selectedId && !currentBlocks.some(block => block.id === selectedId)) {
+            setSelectedId(null);
+        }
+    }, [currentBlocks, selectedId]);
 
-    // CRUD Handlers for Protocols
-    const saveProtocol = React.useCallback(async (nextProtocol) => {
-        const nextSignature = JSON.stringify({
-            label: nextProtocol.label,
-            type: nextProtocol.type,
-            description: nextProtocol.description || null,
-            children: nextProtocol.children || []
-        });
+    const applyProtocolUpdate = useCallback((nextProtocol) => {
+        setProtocols(prev => prev.map(protocol => protocol.id === nextProtocol.id ? nextProtocol : protocol));
+    }, [setProtocols]);
 
-        if (lastSavedSignatureRef.current === nextSignature) {
+    const saveProtocol = useCallback(async (nextProtocol) => {
+        const nextSignature = serializeProtocol(nextProtocol);
+
+        if (lastPersistedSignatureRef.current === nextSignature) {
             return nextProtocol;
         }
 
         try {
-            setStatusMsg('保存中...');
+            showStatus('保存中...');
             const saved = await api.updateProtocol(nextProtocol.id, {
                 label: nextProtocol.label,
                 type: nextProtocol.type,
                 description: nextProtocol.description || null,
                 children: nextProtocol.children || []
             });
-            lastSavedSignatureRef.current = nextSignature;
-            setProtocols(prev => prev.map(protocol => protocol.id === saved.id ? saved : protocol));
-            setStatusMsg('协议已保存');
-            setTimeout(() => setStatusMsg(''), 1200);
+            lastPersistedSignatureRef.current = serializeProtocol(saved);
+            applyProtocolUpdate(saved);
+            showStatus('协议已保存', 1200);
             return saved;
         } catch (error) {
             console.error('Failed to save protocol', error);
-            setStatusMsg('协议保存失败');
+            showStatus('协议保存失败', 1500);
             throw error;
         }
-    }, [setProtocols]);
+    }, [applyProtocolUpdate, showStatus]);
 
-    const scheduleProtocolSave = React.useCallback((nextProtocol) => {
+    const scheduleProtocolSave = useCallback((nextProtocol) => {
         if (saveTimerRef.current) {
             clearTimeout(saveTimerRef.current);
         }
 
-        setStatusMsg('待保存...');
+        showStatus('待保存...');
         saveTimerRef.current = setTimeout(() => {
             saveProtocol(nextProtocol);
         }, 350);
-    }, [saveProtocol]);
+    }, [saveProtocol, showStatus]);
 
     const handleAddProtocol = async () => {
         const newProto = {
@@ -133,15 +150,14 @@ export default function Protocol({ protocols, setProtocols }) {
             children: []
         };
         try {
-            setStatusMsg('创建协议...');
+            showStatus('创建协议...');
             const created = await api.createProtocol(newProto);
             setProtocols(prev => [...prev, created]);
             setActiveProtocolId(created.id);
-            setStatusMsg('协议已创建');
-            setTimeout(() => setStatusMsg(''), 1200);
+            showStatus('协议已创建', 1200);
         } catch (error) {
             console.error('Failed to create protocol', error);
-            setStatusMsg('协议创建失败');
+            showStatus('协议创建失败', 1500);
         }
     };
 
@@ -149,23 +165,21 @@ export default function Protocol({ protocols, setProtocols }) {
         e.stopPropagation();
         if (protocols.length <= 1) return;
         try {
-            setStatusMsg('删除协议...');
+            showStatus('删除协议...');
             await api.deleteProtocol(id);
             const remaining = protocols.filter(p => p.id !== id);
-            setProtocols(remaining);
-            if (activeProtocolId === id) setActiveProtocolId(remaining[0].id);
-            setStatusMsg('协议已删除');
-            setTimeout(() => setStatusMsg(''), 1200);
+            setProtocols(prev => prev.filter(protocol => protocol.id !== id));
+            if (activeProtocolId === id) setActiveProtocolId(remaining[0]?.id || null);
+            showStatus('协议已删除', 1200);
         } catch (error) {
             console.error('Failed to delete protocol', error);
-            setStatusMsg('协议删除失败');
+            showStatus('协议删除失败', 1500);
         }
     };
 
-    // Helper: Update the tree immutably
-    const updateTree = (newChildren) => {
-        // Create a deep copy of current protocol to modify
-        // For simplicity in this demo, we clone the logic
+    const updateTree = useCallback((newChildren) => {
+        if (!currentProtocol || !activeContainerNode) return;
+
         const updateRecursive = (node) => {
             if (node.id === activeContainerNode.id) {
                 return { ...node, children: newChildren };
@@ -178,15 +192,10 @@ export default function Protocol({ protocols, setProtocols }) {
         };
 
         const newRoot = updateRecursive(currentProtocol);
-
-        // Update protocol list
-        setProtocols(prev => prev.map(p => p.id === activeProtocolId ? newRoot : p));
+        applyProtocolUpdate(newRoot);
         scheduleProtocolSave(newRoot);
+    }, [activeContainerNode, applyProtocolUpdate, currentProtocol, scheduleProtocolSave]);
 
-        // Path does not need update because we look up activeContainerNode dynamically
-    };
-
-    // Handlers
     const handleSetBlocks = (newBlocks) => {
         updateTree(newBlocks);
     };
@@ -218,15 +227,13 @@ export default function Protocol({ protocols, setProtocols }) {
     // Navigation Logic
     const handleEnterContainer = (block) => {
         if (block.type === 'container') {
-            // Push ID to path, we resolve node dynamically
-            setPath([...path, block]);
+            setPathIds(prev => [...prev, block.id]);
             setSelectedId(null);
         }
     };
 
     const handleBreadcrumbClick = (index) => {
-        const newPath = path.slice(0, index + 1);
-        setPath(newPath);
+        setPathIds(prev => prev.slice(0, index + 1));
         setSelectedId(null);
     };
 
@@ -280,16 +287,16 @@ export default function Protocol({ protocols, setProtocols }) {
             {/* Canvas Area */}
             <section className="flex-1 relative bg-[url('/grid.png')] bg-repeat opacity-90 overflow-hidden flex flex-col">
                 {/* Breadcrumbs */}
-                <div className="h-10 border-b border-nier-light bg-nier-dark/90 flex items-center px-4 gap-2 text-xs font-mono">
-                    {path.map((node, index) => (
+                    <div className="h-10 border-b border-nier-light bg-nier-dark/90 flex items-center px-4 gap-2 text-xs font-mono">
+                    {pathNodes.map((node, index) => (
                         <React.Fragment key={node.id}>
                             <button
                                 onClick={() => handleBreadcrumbClick(index)}
-                                className={`hover:underline ${index === path.length - 1 ? 'font-bold decoration-2' : 'opacity-60'}`}
+                                className={`hover:underline ${index === pathNodes.length - 1 ? 'font-bold decoration-2' : 'opacity-60'}`}
                             >
-                                {findNode(currentProtocol, node.id)?.label || node.label}
+                                {node.label}
                             </button>
-                            {index < path.length - 1 && <span className="opacity-30">/</span>}
+                            {index < pathNodes.length - 1 && <span className="opacity-30">/</span>}
                         </React.Fragment>
                     ))}
                 </div>
@@ -325,7 +332,7 @@ export default function Protocol({ protocols, setProtocols }) {
                                 value={currentProtocol.label}
                                 onChange={(e) => {
                                     const updatedProto = { ...currentProtocol, label: e.target.value };
-                                    setProtocols(prev => prev.map(p => p.id === activeProtocolId ? updatedProto : p));
+                                    applyProtocolUpdate(updatedProto);
                                     scheduleProtocolSave(updatedProto);
                                 }}
                                 className="bg-transparent border-b border-nier-light/50 focus:border-nier-light focus:outline-none py-1 font-mono tracking-wide"

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import Protocol from './pages/Protocol';
 import Instruction from './pages/Instruction';
@@ -8,36 +8,38 @@ import Terminal from './pages/Terminal';
 import DataHub from './pages/DataHub';
 import GlitchEffect from './components/visuals/GlitchEffect';
 import { api } from './api';
+import { PAGE_REGISTRY, PAGE_STATUS_BY_PATH } from './config/pageRegistry';
 
 function Layout() {
     const location = useLocation();
-    const routeTitleMap = {
-        '/protocol': 'Protocol Definition',
-        '/instruction': 'Instruction Management',
-        '/processing': 'Instruction Processing',
-        '/orchestration': 'Orchestration Binding',
-        '/terminal': 'Communication Terminal',
-        '/datahub': 'Data Hub'
-    };
-    const currentRouteTitle = routeTitleMap[location.pathname] || 'YoRHa-HexFlow';
+    const currentRouteTitle = PAGE_STATUS_BY_PATH[location.pathname]?.titleEn || 'YoRHa-HexFlow';
 
     // Global Data State (Lifted)
     const [protocols, setProtocols] = useState([]);
     const [instructions, setInstructions] = useState([]);
+
+    const loadProtocols = useCallback(async () => {
+        const protocolData = await api.getProtocols();
+        setProtocols(protocolData);
+        return protocolData;
+    }, []);
+
+    const loadInstructions = useCallback(async (search = '') => {
+        const instructionData = await api.getInstructions(search);
+        setInstructions(instructionData);
+        return instructionData;
+    }, []);
 
     useEffect(() => {
         let alive = true;
 
         const loadAppData = async () => {
             try {
-                const [protocolData, instructionData] = await Promise.all([
-                    api.getProtocols(),
-                    api.getInstructions()
+                await Promise.all([
+                    loadProtocols(),
+                    loadInstructions()
                 ]);
-                if (alive) {
-                    setProtocols(protocolData);
-                    setInstructions(instructionData);
-                }
+                if (!alive) return;
             } catch (error) {
                 console.error('Failed to load app-level data', error);
             }
@@ -48,7 +50,7 @@ function Layout() {
         return () => {
             alive = false;
         };
-    }, []);
+    }, [loadInstructions, loadProtocols]);
 
     // Nav Item Helper
     const NavItem = ({ to, label, shortcut }) => (
@@ -68,6 +70,25 @@ function Layout() {
         </NavLink>
     );
 
+    const renderRouteElement = (pageKey) => {
+        switch (pageKey) {
+            case 'protocol':
+                return <Protocol protocols={protocols} setProtocols={setProtocols} />;
+            case 'instruction':
+                return <Instruction instructions={instructions} setInstructions={setInstructions} onWebUpdate={setInstructions} reloadInstructions={loadInstructions} />;
+            case 'processing':
+                return <InstructionProcessor instructions={instructions} setInstructions={setInstructions} reloadInstructions={loadInstructions} />;
+            case 'orchestration':
+                return <Orchestration protocols={protocols} instructions={instructions} />;
+            case 'terminal':
+                return <Terminal />;
+            case 'datahub':
+                return <DataHub />;
+            default:
+                return <Navigate to="/protocol" replace />;
+        }
+    };
+
     return (
         <div className="flex h-screen w-screen bg-nier-dark text-nier-light overflow-hidden relative selection:bg-nier-light selection:text-nier-dark font-sans">
             <GlitchEffect />
@@ -82,12 +103,9 @@ function Layout() {
 
                 {/* Links */}
                 <div className="flex-1 flex flex-col py-6 gap-2">
-                    <NavItem to="/protocol" label="协议定义" shortcut="A" />
-                    <NavItem to="/instruction" label="指令管理" shortcut="B" />
-                    <NavItem to="/processing" label="指令加工" shortcut="R" />
-                    <NavItem to="/orchestration" label="编排绑定" shortcut="C" />
-                    <NavItem to="/terminal" label="通讯调试" shortcut="D" />
-                    <NavItem to="/datahub" label="数据中心" shortcut="E" />
+                    {PAGE_REGISTRY.map((page) => (
+                        <NavItem key={page.key} to={page.path} label={page.titleZh} shortcut={page.shortcut} />
+                    ))}
                 </div>
 
                 {/* Footer Info */}
@@ -123,12 +141,9 @@ function Layout() {
                 <div key={location.pathname} className="flex-1 overflow-hidden relative flex flex-col">
                     <Routes>
                         <Route path="/" element={<Navigate to="/protocol" replace />} />
-                        <Route path="/protocol" element={<Protocol protocols={protocols} setProtocols={setProtocols} />} />
-                        <Route path="/instruction" element={<Instruction instructions={instructions} setInstructions={setInstructions} onWebUpdate={setInstructions} />} />
-                        <Route path="/processing" element={<InstructionProcessor instructions={instructions} setInstructions={setInstructions} />} />
-                        <Route path="/orchestration" element={<Orchestration protocols={protocols} instructions={instructions} />} />
-                        <Route path="/terminal" element={<Terminal />} />
-                        <Route path="/datahub" element={<DataHub />} />
+                        {PAGE_REGISTRY.map((page) => (
+                            <Route key={page.key} path={page.path} element={renderRouteElement(page.key)} />
+                        ))}
                     </Routes>
                 </div>
             </main>

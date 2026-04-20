@@ -38,7 +38,9 @@ export function useInstructionData(options = {}) {
     const {
         instructions: externalInstructions,
         setInstructions: setExternalInstructions,
-        onWebUpdate
+        onWebUpdate,
+        fetchInstructions,
+        disableInitialLoad = false
     } = normalizedOptions;
     const [internalInstructions, setInternalInstructions] = useState(externalInstructions || []);
     const [activeInstructionId, setActiveInstructionId] = useState(null);
@@ -163,7 +165,7 @@ export function useInstructionData(options = {}) {
         const requestId = ++instructionRequestIdRef.current;
         setIsLoading(true);
         try {
-            const instData = await api.getInstructions();
+            const instData = await (fetchInstructions ? fetchInstructions() : api.getInstructions());
             if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
             setInstructionsState(instData);
             reconcileActiveInstruction(instData);
@@ -177,12 +179,13 @@ export function useInstructionData(options = {}) {
                 setIsLoading(false);
             }
         }
-    }, [onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
+    }, [fetchInstructions, onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
 
     // Load Initial Data
     useEffect(() => {
+        if (disableInitialLoad) return;
         loadData();
-    }, [loadData]);
+    }, [disableInitialLoad, loadData]);
 
     useEffect(() => {
         loadOperatorTemplates();
@@ -192,7 +195,7 @@ export function useInstructionData(options = {}) {
         const requestId = ++instructionRequestIdRef.current;
         setIsLoading(true);
         try {
-            const data = await api.getInstructions(search);
+            const data = await (fetchInstructions ? fetchInstructions(search) : api.getInstructions(search));
             if (!isMountedRef.current || requestId !== instructionRequestIdRef.current) return;
             setInstructionsState(data);
             reconcileActiveInstruction(data);
@@ -207,7 +210,7 @@ export function useInstructionData(options = {}) {
                 setIsLoading(false);
             }
         }
-    }, [onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
+    }, [fetchInstructions, onWebUpdate, reconcileActiveInstruction, setExternalInstructions, setInstructionsState, showStatus]);
 
     const updateLocalInstruction = useCallback((updatedInst) => {
         setInstructionsState(prev => prev.map(i => i.id === updatedInst.id ? updatedInst : i));
